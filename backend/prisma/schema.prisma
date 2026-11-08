@@ -1,0 +1,677 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ==========================================
+// ENUMS
+// ==========================================
+
+enum UserRole {
+  PARENT
+  CHILD
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum DevicePlatform {
+  ANDROID
+  IOS
+}
+
+enum DeviceStatus {
+  ACTIVE
+  OFFLINE
+  LOCKED
+  PAUSED
+  REMOVED
+}
+
+enum PairingStatus {
+  PENDING
+  COMPLETED
+  EXPIRED
+  CANCELLED
+}
+
+enum PermissionType {
+  CAMERA
+  MICROPHONE
+  LOCATION
+  STORAGE
+  CONTACTS
+  NOTIFICATIONS
+  OTHER
+}
+
+enum RequestType {
+  HARDWARE_PERMISSION
+  APPLICATION_ACCESS
+  DOMAIN_ACCESS
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  DENIED
+  EXPIRED
+}
+
+enum AppDecision {
+  ALLOW
+  BLOCK
+}
+
+enum CommandType {
+  LOCK
+  UNLOCK
+  PAUSE
+  RESUME
+  SYNC_POLICY
+}
+
+enum CommandStatus {
+  PENDING
+  SENT
+  ACKNOWLEDGED
+  FAILED
+  EXPIRED
+}
+
+enum DomainAction {
+  ALLOW
+  BLOCK
+}
+
+enum AlertType {
+  PROHIBITED_APP_LAUNCH
+  APP_INSTALL_ATTEMPT
+  PROHIBITED_DOMAIN
+  MALWARE_DETECTED
+  PHISHING_DETECTED
+  ROOT_DETECTED
+  TAMPER_DETECTED
+  DEVICE_OFFLINE
+  SCREEN_TIME_EXCEEDED
+  BEDTIME_VIOLATION
+  PERMISSION_REQUEST
+  OTHER
+}
+
+enum AlertSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum NotificationChannel {
+  PUSH
+  IN_APP
+}
+
+enum ActivityType {
+  APP_LAUNCH
+  APP_CLOSE
+  DEVICE_ONLINE
+  DEVICE_OFFLINE
+  SCREEN_LOCK
+  SCREEN_UNLOCK
+  POLICY_VIOLATION
+  LOCATION_UPDATE
+  OTHER
+}
+
+// ==========================================
+// 1. USER
+// ==========================================
+
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  name         String     @db.VarChar(100)
+  email        String?    @unique @db.VarChar(255)
+  passwordHash String?
+  role         UserRole
+  status       UserStatus @default(ACTIVE)
+
+  parentId String? @db.Uuid
+  parent   User?   @relation("ParentChildren", fields: [parentId], references: [id], onDelete: Restrict)
+  children User[]  @relation("ParentChildren")
+
+  mfa MfaConfiguration?
+
+  devices Device[]
+
+  createdPairings DevicePairing[] @relation("PairingCreator")
+  childPairings   DevicePairing[] @relation("ChildPairings")
+
+  permissionRequests PermissionRequest[] @relation("ChildRequests")
+  reviewedRequests   PermissionRequest[] @relation("RequestReviewer")
+
+  updatedDevicePermissions  DevicePermission[] @relation("PermissionUpdater")
+  updatedScreenTimePolicies ScreenTimePolicy[] @relation("ScreenTimeUpdater")
+
+  screenTimePolicies ScreenTimePolicy[]
+
+  appUsages     AppUsage[]
+  childCommands RemoteCommand[] @relation("ChildCommands")
+
+  remoteCommands RemoteCommand[] @relation("CommandIssuer")
+
+  browserHistory BrowserHistory[]
+
+  securityAlerts SecurityAlert[] @relation("AlertChild")
+
+  notifications Notification[]
+
+  refreshTokens RefreshToken[]
+
+  auditLogs AuditLog[] @relation("AuditActor")
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([parentId, role])
+  @@index([role, status])
+}
+
+// ==========================================
+// 2. DEVICE
+// ==========================================
+
+model Device {
+  id      String @id @default(uuid()) @db.Uuid
+  childId String @db.Uuid
+  child   User   @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  deviceIdentifier String         @unique @db.VarChar(255)
+  deviceName       String         @db.VarChar(150)
+  platform         DevicePlatform
+  osVersion        String?        @db.VarChar(100)
+  appVersion       String?        @db.VarChar(50)
+  status           DeviceStatus   @default(ACTIVE)
+
+  pushToken     String?
+  lastSeenAt    DateTime? @db.Timestamptz(6)
+  lastIpAddress String?
+
+  permissions        DevicePermission[]
+  permissionRequests PermissionRequest[]
+
+  pairing          DevicePairing?
+  screenTimePolicy ScreenTimePolicy?
+
+  appPolicies AppPolicy[]
+  appUsages   AppUsage[]
+  activities  DeviceActivity[]
+
+  remoteCommands RemoteCommand[]
+
+  dnsPolicy DnsPolicy?
+
+  browserHistory BrowserHistory[]
+
+  securityAlerts SecurityAlert[]
+
+  refreshTokens RefreshToken[]
+
+  auditLogs AuditLog[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([childId, status])
+}
+
+// ==========================================
+// 3. DEVICE PAIRING
+// ==========================================
+
+model DevicePairing {
+  id String @id @default(uuid()) @db.Uuid
+
+  parentId String @db.Uuid
+  parent   User   @relation("PairingCreator", fields: [parentId], references: [id], onDelete: Cascade)
+
+  childId String @db.Uuid
+  child   User   @relation("ChildPairings", fields: [childId], references: [id], onDelete: Cascade)
+
+  deviceId String? @unique @db.Uuid
+  device   Device? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+
+  pairingCodeHash String        @unique
+  status          PairingStatus @default(PENDING)
+
+  expiresAt   DateTime  @db.Timestamptz(6)
+  completedAt DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([parentId, status])
+  @@index([childId, status])
+}
+
+// ==========================================
+// 4. DEVICE PERMISSION
+// ==========================================
+
+model DevicePermission {
+  id String @id @default(uuid()) @db.Uuid
+
+  deviceId String @db.Uuid
+  device   Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  permissionType PermissionType
+  allowed        Boolean        @default(false)
+
+  updatedById String @db.Uuid
+  updatedBy   User   @relation("PermissionUpdater", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([deviceId, permissionType])
+}
+
+// ==========================================
+// 5. PERMISSION REQUEST
+// ==========================================
+
+model PermissionRequest {
+  id String @id @default(uuid()) @db.Uuid
+
+  childId String @db.Uuid
+  child   User   @relation("ChildRequests", fields: [childId], references: [id], onDelete: Cascade)
+
+  deviceId String @db.Uuid
+  device   Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  requestType RequestType
+  resource    String      @db.VarChar(500)
+  reason      String?     @db.VarChar(500)
+
+  status RequestStatus @default(PENDING)
+
+  reviewedById String? @db.Uuid
+  reviewedBy   User?   @relation("RequestReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  reviewedAt DateTime? @db.Timestamptz(6)
+  expiresAt  DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([childId, status])
+  @@index([deviceId, createdAt])
+}
+
+// ==========================================
+// 6. APP POLICY
+// ==========================================
+
+model AppPolicy {
+  id String @id @default(uuid()) @db.Uuid
+
+  deviceId String @db.Uuid
+  device   Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  appIdentifier String      @db.VarChar(255)
+  appName       String?     @db.VarChar(150)
+  decision      AppDecision
+  category      String?     @db.VarChar(100)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([deviceId, appIdentifier])
+}
+
+// ==========================================
+// 7. SCREEN TIME POLICY
+// ==========================================
+
+model ScreenTimePolicy {
+  id String @id @default(uuid()) @db.Uuid
+
+  childId String @db.Uuid
+  child   User   @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  deviceId String @unique @db.Uuid
+  device   Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  enabled           Boolean @default(true)
+  dailyLimitMinutes Int
+
+  bedtimeStart String? @db.VarChar(5)
+  bedtimeEnd   String? @db.VarChar(5)
+
+  timezone String @default("Asia/Dhaka") @db.VarChar(100)
+
+  updatedById String @db.Uuid
+  updatedBy   User   @relation("ScreenTimeUpdater", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  perAppLimits PerAppLimit[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([childId])
+}
+
+// ==========================================
+// 8. PER APP LIMIT
+// ==========================================
+
+model PerAppLimit {
+  id String @id @default(uuid()) @db.Uuid
+
+  screenTimePolicyId String @db.Uuid
+
+  screenTimePolicy ScreenTimePolicy @relation(fields: [screenTimePolicyId], references: [id], onDelete: Cascade)
+
+  appIdentifier String @db.VarChar(255)
+  limitMinutes  Int
+
+  @@unique([screenTimePolicyId, appIdentifier])
+}
+
+// ==========================================
+// 9. APP USAGE
+// ==========================================
+
+model AppUsage {
+  id String @id @default(uuid()) @db.Uuid
+
+  deviceId String @db.Uuid
+  device   Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  childId String @db.Uuid
+  child   User   @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  appIdentifier   String    @db.VarChar(255)
+  startedAt       DateTime  @db.Timestamptz(6)
+  endedAt         DateTime? @db.Timestamptz(6)
+  durationSeconds Int       @default(0)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([deviceId, startedAt])
+  @@index([appIdentifier])
+  @@index([childId, startedAt])
+}
+
+// ==========================================
+// 10. DEVICE ACTIVITY
+// ==========================================
+
+model DeviceActivity {
+  id String @id @default(uuid()) @db.Uuid
+
+  deviceId String @db.Uuid
+  device   Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  activityType  ActivityType
+  foregroundApp String?      @db.VarChar(255)
+
+  latitude  Decimal? @db.Decimal(10, 7)
+  longitude Decimal? @db.Decimal(10, 7)
+
+  metadata   Json?
+  capturedAt DateTime @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([deviceId, capturedAt])
+  @@index([activityType, capturedAt])
+}
+
+// ==========================================
+// 11. REMOTE COMMAND
+// ==========================================
+
+model RemoteCommand {
+  id String @id @default(uuid()) @db.Uuid
+
+  deviceId String @db.Uuid
+  device   Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  childId String @db.Uuid
+  child   User   @relation("ChildCommands", fields: [childId], references: [id], onDelete: Cascade)
+
+  issuedById String @db.Uuid
+  issuedBy   User   @relation("CommandIssuer", fields: [issuedById], references: [id], onDelete: Restrict)
+
+  commandType CommandType
+  status      CommandStatus @default(PENDING)
+  payload     Json?
+
+  executedAt DateTime? @db.Timestamptz(6)
+  expiresAt  DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([deviceId, status])
+  @@index([childId, createdAt])
+}
+
+// ==========================================
+// 12. DNS POLICY
+// ==========================================
+
+model DnsPolicy {
+  id String @id @default(uuid()) @db.Uuid
+
+  deviceId String @unique @db.Uuid
+  device   Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  enabled     Boolean @default(true)
+  provider    String? @db.VarChar(100)
+  dohEndpoint String?
+  dotEndpoint String?
+
+  safeSearch Boolean @default(true)
+
+  domainRules DomainRule[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+}
+
+// ==========================================
+// 13. DOMAIN CATEGORY
+// ==========================================
+
+model DomainCategory {
+  id          String  @id @default(uuid()) @db.Uuid
+  name        String  @unique @db.VarChar(100)
+  slug        String  @unique @db.VarChar(100)
+  description String?
+
+  domainRules DomainRule[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+}
+
+// ==========================================
+// 14. DOMAIN RULE
+// ==========================================
+
+model DomainRule {
+  id String @id @default(uuid()) @db.Uuid
+
+  dnsPolicyId String @db.Uuid
+
+  dnsPolicy DnsPolicy @relation(fields: [dnsPolicyId], references: [id], onDelete: Cascade)
+
+  categoryId String?         @db.Uuid
+  category   DomainCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  domain String       @db.VarChar(255)
+  action DomainAction
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([dnsPolicyId, domain])
+  @@index([categoryId])
+}
+
+// ==========================================
+// 15. BROWSER HISTORY
+// ==========================================
+
+model BrowserHistory {
+  id String @id @default(uuid()) @db.Uuid
+
+  deviceId String @db.Uuid
+  device   Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  childId String @db.Uuid
+  child   User   @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  url       String
+  domain    String  @db.VarChar(255)
+  pageTitle String?
+
+  blocked  Boolean @default(false)
+  category String? @db.VarChar(100)
+
+  visitedAt DateTime @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([deviceId, visitedAt])
+  @@index([childId, visitedAt])
+  @@index([domain])
+}
+
+// ==========================================
+// 16. SECURITY ALERT
+// ==========================================
+
+model SecurityAlert {
+  id String @id @default(uuid()) @db.Uuid
+
+  childId String @db.Uuid
+  child   User   @relation("AlertChild", fields: [childId], references: [id], onDelete: Cascade)
+
+  deviceId String? @db.Uuid
+  device   Device? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+
+  type        AlertType
+  severity    AlertSeverity @default(MEDIUM)
+  title       String        @db.VarChar(200)
+  description String?
+  metadata    Json?
+
+  acknowledgedAt DateTime? @db.Timestamptz(6)
+
+  notifications Notification[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([childId, createdAt])
+  @@index([severity, acknowledgedAt])
+}
+
+// ==========================================
+// 17. NOTIFICATION
+// ==========================================
+
+model Notification {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  alertId String?        @db.Uuid
+  alert   SecurityAlert? @relation(fields: [alertId], references: [id], onDelete: SetNull)
+
+  title   String              @db.VarChar(200)
+  body    String
+  channel NotificationChannel @default(IN_APP)
+
+  readAt DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([userId, readAt, createdAt])
+}
+
+// ==========================================
+// 18. REFRESH TOKEN
+// ==========================================
+
+model RefreshToken {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  deviceId String? @db.Uuid
+  device   Device? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+
+  tokenHash String @unique
+
+  expiresAt DateTime  @db.Timestamptz(6)
+  revokedAt DateTime? @db.Timestamptz(6)
+
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([userId, expiresAt])
+}
+
+// ==========================================
+// 19. MFA CONFIGURATION
+// ==========================================
+
+model MfaConfiguration {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @unique @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  secretEncrypted   String?
+  enabled           Boolean   @default(false)
+  confirmedAt       DateTime? @db.Timestamptz(6)
+  recoveryCodesHash Json?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+}
+
+// ==========================================
+// 20. AUDIT LOG
+// ==========================================
+
+model AuditLog {
+  id String @id @default(uuid()) @db.Uuid
+
+  actorId String @db.Uuid
+  actor   User   @relation("AuditActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  deviceId String? @db.Uuid
+  device   Device? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+
+  action     String  @db.VarChar(150)
+  entityType String? @db.VarChar(100)
+  entityId   String? @db.VarChar(100)
+
+  metadata  Json?
+  ipAddress String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+}

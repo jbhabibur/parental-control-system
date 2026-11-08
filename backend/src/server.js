@@ -1,56 +1,19 @@
-const http = require("http");
+import "./config/dotenv.js";
 
-const app = require("./app");
-const connectDB = require("./config/db");
+import app from "./app.js";
+import { connectDatabase } from "./config/database.js";
+import env from "./config/dotenv.js";
 
-const { PORT } = require("./config/dotenv");
-
-const { initializeSocket } = require("./config/socket");
-
-// Create HTTP Server
-const httpServer = http.createServer(app);
-
-// Start Server
 const startServer = async () => {
-  try {
-    // Connect MongoDB
-    await connectDB();
+  await connectDatabase();
 
-    // Initialize Socket.IO
-    initializeSocket(httpServer);
-
-    // Start HTTP Server
-    httpServer.listen(PORT, "0.0.0.0", () => {
-      console.log("--------------------------------");
-      console.log("Parental Control Backend Started");
-      console.log(`Server: http://localhost:${PORT}`);
-      console.log(`Health: http://localhost:${PORT}/api/health`);
-      console.log("Socket.IO: Active");
-      console.log("--------------------------------");
-    });
-
-  } catch (error) {
-    console.error("Server Startup Failed:", error.message);
-    process.exit(1);
-  }
-};
-
-startServer();
-
-// Graceful Shutdown
-const shutdown = async () => {
-  console.log("Server shutting down...");
-
-  httpServer.close(async () => {
-    const mongoose = require("mongoose");
-
-    await mongoose.disconnect();
-
-    process.exit(0);
+  app.listen(env.PORT, () => {
+    console.log("--------------------------------");
+    console.log("Parental Control Backend (PostgreSQL)");
+    console.log(`[SUCCESS] Server is running on port ${env.PORT}`);
+    console.log(`Local URL: http://localhost:${env.PORT}`);
+    console.log("--------------------------------");
   });
 };
 
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
-
-module.exports = httpServer;
+startServer();

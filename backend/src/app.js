@@ -1,80 +1,45 @@
-const express = require("express");
-const cors = require("cors");
-const helmet = require("helmet");
-const { rateLimit } = require("express-rate-limit");
-const pinoHttp = require("pino-http");
+import express from "express";
+import cors from "cors";
+import helmet from "helmet";
 
-const { CLIENT_URL } = require("./config/dotenv");
+import indexRouter from "./routes/index.routes.js";
+
+import {
+  notFoundHandler,
+  errorHandler,
+} from "./middlewares/error.middleware.js";
 
 const app = express();
 
-// Security
+// Security middleware
 app.use(helmet());
 
-// CORS
-app.use(cors({
-  origin: CLIENT_URL,
-  credentials: true
-}));
+// CORS middleware
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    credentials: true,
+  }),
+);
 
-// Body Parser
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true }));
+// Body parser
+app.use(express.json({ limit: "1mb" }));
 
-// Logger
-app.use(pinoHttp());
-
-// Rate Limiter
-app.use("/api", rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 100,
-  standardHeaders: "draft-8",
-  legacyHeaders: false
-}));
-
-// Home Route
+// Base route
 app.get("/", (req, res) => {
-  res.json({
+  res.status(200).json({
     success: true,
-    message: "Parental Control Backend Running"
+    message: "Parental Control Server with Supabase PostgreSQL is Running",
   });
 });
 
-// Health Check
-app.get("/api/health", (req, res) => {
-  const mongoose = require("mongoose");
+// API routes
+app.use("/api", indexRouter);
 
-  res.json({
-    success: true,
-    message: "API is Healthy",
-    database:
-      mongoose.connection.readyState === 1
-        ? "Connected"
-        : "Disconnected"
-  });
-});
+// 404 handler
+app.use(notFoundHandler);
 
-// API Routes will be registered here
+// Global error handler
+app.use(errorHandler);
 
-// 404 Handler
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    message: "Route Not Found"
-  });
-});
-
-// Error Handler
-app.use((err, req, res, next) => {
-  req.log?.error(err);
-
-  res.status(err.status || 500).json({
-    success: false,
-    message:
-      err.status && err.status < 500
-        ? err.message
-        : "Internal Server Error"
-  });
-});
-
-module.exports = app;
+export default app;

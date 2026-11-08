@@ -1,22 +1,37 @@
-const dotenv = require("dotenv");
+import dotenv from "dotenv";
 
 dotenv.config();
 
 const requiredVariables = [
-  "MONGODB_URI",
-  "JWT_SECRET"
+  "DATABASE_URL",
+  "DIRECT_URL",
+  "JWT_SECRET",
+  "JWT_REFRESH_SECRET",
 ];
 
 for (const variable of requiredVariables) {
   if (!process.env[variable]) {
-    throw new Error(`${variable} is missing in .env file`);
+    throw new Error(`Missing required environment variable: ${variable}`);
   }
 }
 
-module.exports = {
-  PORT: process.env.PORT || 3000,
+export const env = {
   NODE_ENV: process.env.NODE_ENV || "development",
-  MONGODB_URI: process.env.MONGODB_URI,
-  CLIENT_URL: process.env.CLIENT_URL || "http://localhost:8081",
-  JWT_SECRET: process.env.JWT_SECRET
+  PORT: Number(process.env.PORT) || 5000,
+
+  DATABASE_URL: process.env.DATABASE_URL,
+  DIRECT_URL: process.env.DIRECT_URL,
+
+  JWT_SECRET: process.env.JWT_SECRET,
+  JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || "15m",
+
+  JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET,
+  JWT_REFRESH_EXPIRES_IN: process.env.JWT_REFRESH_EXPIRES_IN || "7d",
+
+  CLIENT_ORIGINS: (process.env.CLIENT_ORIGINS || "http://localhost:3000")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
 };
+
+export default env;
