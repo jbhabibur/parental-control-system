@@ -1,201 +1,138 @@
-
-import React, { useState } from "react";
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-} from "react-native";
-import { router } from "expo-router";
+import { Link, router } from "expo-router";
+import { SymbolView } from "expo-symbols";
+import { useState } from "react";
+import { Alert, Pressable, Text, View } from "react-native";
+import { Button, C, Field, Screen } from "../../components/ui";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = () => {
     if (!email.trim() || !password.trim()) {
-      alert("Please enter email and password");
+      Alert.alert(
+        "Missing information",
+        "Please enter your email and password.",
+      );
       return;
     }
-
-    // Temporary navigation for UI testing
+    // UI demo only. Real authentication will be connected to the backend later.
     router.replace("/dashboard");
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.logoContainer}>
-          <Text style={styles.logo}>P</Text>
+    <Screen>
+      <View style={{ alignItems: "center", marginTop: 34, marginBottom: 34 }}>
+        <View
+          style={{
+            width: 76,
+            height: 76,
+            borderRadius: 24,
+            backgroundColor: C.blue,
+            alignItems: "center",
+            justifyContent: "center",
+            marginBottom: 18,
+          }}
+        >
+          <Text style={{ color: "#fff", fontSize: 38, fontWeight: "900" }}>
+            P
+          </Text>
         </View>
-
-        <Text style={styles.title}>Parent Control</Text>
-        <Text style={styles.subtitle}>
-          Securely manage and protect your child's device.
+        <Text style={{ fontSize: 29, fontWeight: "900", color: C.navy }}>
+          Welcome back
         </Text>
+        <Text
+          style={{
+            color: C.muted,
+            textAlign: "center",
+            marginTop: 9,
+            lineHeight: 21,
+          }}
+        >
+          Sign in to manage your family’s digital safety.
+        </Text>
+      </View>
 
-        <View style={styles.form}>
-          <Text style={styles.label}>Email Address</Text>
-
-          <TextInput
-            style={styles.input}
-            placeholder="Enter your email"
-            placeholderTextColor="#94A3B8"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-          />
-
-          <Text style={styles.label}>Password</Text>
-
-          <TextInput
-            style={styles.input}
-            placeholder="Enter your password"
-            placeholderTextColor="#94A3B8"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
-
-          <TouchableOpacity style={styles.forgot}>
-            <Text style={styles.forgotText}>Forgot Password?</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.loginButton}
-            onPress={handleLogin}
+      <Field
+        label="Email address"
+        placeholder="name@example.com"
+        value={email}
+        onChangeText={setEmail}
+        keyboardType="email-address"
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
+      <Field
+        label="Password"
+        placeholder="Enter your password"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry={!showPassword}
+        rightAccessory={
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={
+              showPassword ? "Hide password" : "Show password"
+            }
+            accessibilityState={{ selected: showPassword }}
+            hitSlop={8}
+            onPress={() => setShowPassword((visible) => !visible)}
+            style={{
+              width: 44,
+              height: 44,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
           >
-            <Text style={styles.loginButtonText}>Sign In</Text>
-          </TouchableOpacity>
+            <SymbolView
+              name={{
+                ios: showPassword ? "eye.slash" : "eye",
+                android: showPassword ? "visibility_off" : "visibility",
+                web: showPassword ? "visibility_off" : "visibility",
+              }}
+              tintColor={C.muted}
+              size={21}
+            />
+          </Pressable>
+        }
+      />
 
-          <View style={styles.registerContainer}>
-            <Text style={styles.registerText}>
-              Don't have an account?{" "}
+      <Link href="/auth/forgot-password" asChild>
+        <Pressable style={{ alignSelf: "flex-end", marginBottom: 20 }}>
+          <Text style={{ color: C.blue, fontWeight: "700" }}>
+            Forgot password?
+          </Text>
+        </Pressable>
+      </Link>
+      <Button title="Sign In" onPress={handleLogin} />
+
+      <View
+        style={{
+          flexDirection: "row",
+          justifyContent: "center",
+          marginTop: 26,
+        }}
+      >
+        <Text style={{ color: C.muted }}>Don’t have an account? </Text>
+        <Link href="/auth/register" asChild>
+          <Pressable>
+            <Text style={{ color: C.blue, fontWeight: "800" }}>
+              Create account
             </Text>
-
-            <TouchableOpacity
-              onPress={() => router.push("/auth/register")}
-            >
-              <Text style={styles.registerLink}>Register</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <Text style={styles.footer}>
-          Parent Control System
-        </Text>
-      </ScrollView>
-    </KeyboardAvoidingView>
+          </Pressable>
+        </Link>
+      </View>
+      <Text
+        style={{
+          textAlign: "center",
+          color: "#A0AABC",
+          fontSize: 11,
+          marginTop: 46,
+        }}
+      >
+        PARENT CONTROL SYSTEM • UI PREVIEW
+      </Text>
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F8FAFC",
-  },
-  content: {
-    flexGrow: 1,
-    justifyContent: "center",
-    paddingHorizontal: 28,
-    paddingVertical: 40,
-  },
-  logoContainer: {
-    width: 75,
-    height: 75,
-    borderRadius: 22,
-    backgroundColor: "#2563EB",
-    alignItems: "center",
-    justifyContent: "center",
-    alignSelf: "center",
-    marginBottom: 22,
-  },
-  logo: {
-    color: "#FFFFFF",
-    fontSize: 38,
-    fontWeight: "bold",
-  },
-  title: {
-    fontSize: 29,
-    fontWeight: "bold",
-    color: "#0F172A",
-    textAlign: "center",
-  },
-  subtitle: {
-    fontSize: 14,
-    color: "#64748B",
-    textAlign: "center",
-    marginTop: 10,
-    marginBottom: 38,
-    lineHeight: 22,
-  },
-  form: {
-    width: "100%",
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#334155",
-    marginBottom: 9,
-  },
-  input: {
-    height: 54,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    borderRadius: 12,
-    paddingHorizontal: 15,
-    fontSize: 15,
-    color: "#0F172A",
-    marginBottom: 22,
-  },
-  forgot: {
-    alignSelf: "flex-end",
-    marginBottom: 25,
-  },
-  forgotText: {
-    color: "#2563EB",
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  loginButton: {
-    height: 54,
-    backgroundColor: "#2563EB",
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  loginButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  registerContainer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    marginTop: 25,
-  },
-  registerText: {
-    color: "#64748B",
-    fontSize: 14,
-  },
-  registerLink: {
-    color: "#2563EB",
-    fontWeight: "bold",
-    fontSize: 14,
-  },
-  footer: {
-    textAlign: "center",
-    color: "#94A3B8",
-    fontSize: 12,
-    marginTop: 45,
-  },
-});
