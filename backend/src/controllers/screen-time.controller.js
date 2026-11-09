@@ -8,6 +8,8 @@ import {
   deletePerAppLimit,
 } from "../services/screen-time.service.js";
 
+import { createAuditLog } from "../services/audit-log.service.js";
+
 // ========== Get Screen Time Policy ==========
 export const getPolicy = async (req, res) => {
   try {
@@ -29,13 +31,22 @@ export const getPolicy = async (req, res) => {
   }
 };
 
-// ========= Create Screen Time Policy ==========
+// ========== Create Screen Time Policy ==========
 export const createPolicy = async (req, res) => {
   try {
     const { deviceId } = req.params;
     const parentId = req.user.id;
 
     const policy = await createScreenTimePolicy(parentId, deviceId, req.body);
+
+    await createAuditLog({
+      actorId: parentId,
+      deviceId,
+      action: "SCREEN_TIME_POLICY_CREATED",
+      entityType: "ScreenTimePolicy",
+      entityId: policy.id,
+      ipAddress: req.ip,
+    });
 
     return res.status(201).json({
       success: true,
@@ -50,13 +61,22 @@ export const createPolicy = async (req, res) => {
   }
 };
 
-// ======== Update Screen Time Policy ==========
+// ========== Update Screen Time Policy ==========
 export const updatePolicy = async (req, res) => {
   try {
     const { deviceId } = req.params;
     const parentId = req.user.id;
 
     const policy = await updateScreenTimePolicy(parentId, deviceId, req.body);
+
+    await createAuditLog({
+      actorId: parentId,
+      deviceId,
+      action: "SCREEN_TIME_POLICY_UPDATED",
+      entityType: "ScreenTimePolicy",
+      entityId: policy.id,
+      ipAddress: req.ip,
+    });
 
     return res.status(200).json({
       success: true,
@@ -71,7 +91,7 @@ export const updatePolicy = async (req, res) => {
   }
 };
 
-// ========= Get Per-App Limits ==========
+// ========== Get Per-App Limits ==========
 export const getAppLimits = async (req, res) => {
   try {
     const { deviceId } = req.params;
@@ -92,7 +112,7 @@ export const getAppLimits = async (req, res) => {
   }
 };
 
-// ========= Create Per-App Limit ==========
+// ========== Create Per-App Limit ==========
 export const createAppLimit = async (req, res) => {
   try {
     const { deviceId } = req.params;
@@ -105,6 +125,16 @@ export const createAppLimit = async (req, res) => {
       appIdentifier,
       limitMinutes,
     );
+
+    await createAuditLog({
+      actorId: parentId,
+      deviceId,
+      action: "PER_APP_LIMIT_CREATED",
+      entityType: "PerAppLimit",
+      entityId: appLimit.id,
+      metadata: { appIdentifier, limitMinutes },
+      ipAddress: req.ip,
+    });
 
     return res.status(201).json({
       success: true,
@@ -119,7 +149,7 @@ export const createAppLimit = async (req, res) => {
   }
 };
 
-// ======== Update Per-App Limit ==========
+// ========== Update Per-App Limit ==========
 export const updateAppLimit = async (req, res) => {
   try {
     const { deviceId, limitId } = req.params;
@@ -132,6 +162,16 @@ export const updateAppLimit = async (req, res) => {
       limitId,
       limitMinutes,
     );
+
+    await createAuditLog({
+      actorId: parentId,
+      deviceId,
+      action: "PER_APP_LIMIT_UPDATED",
+      entityType: "PerAppLimit",
+      entityId: limitId,
+      metadata: { limitMinutes },
+      ipAddress: req.ip,
+    });
 
     return res.status(200).json({
       success: true,
@@ -146,13 +186,22 @@ export const updateAppLimit = async (req, res) => {
   }
 };
 
-// ======== Delete Per-App Limit ==========
+// ========== Delete Per-App Limit ==========
 export const deleteAppLimit = async (req, res) => {
   try {
     const { deviceId, limitId } = req.params;
     const parentId = req.user.id;
 
     await deletePerAppLimit(parentId, deviceId, limitId);
+
+    await createAuditLog({
+      actorId: parentId,
+      deviceId,
+      action: "PER_APP_LIMIT_DELETED",
+      entityType: "PerAppLimit",
+      entityId: limitId,
+      ipAddress: req.ip,
+    });
 
     return res.status(200).json({
       success: true,

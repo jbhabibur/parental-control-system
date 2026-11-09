@@ -7,6 +7,7 @@ const requiredVariables = [
   "DIRECT_URL",
   "JWT_SECRET",
   "JWT_REFRESH_SECRET",
+  "MFA_ENCRYPTION_KEY",
 ];
 
 for (const variable of requiredVariables) {
@@ -27,6 +28,8 @@ export const env = {
 
   JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET,
   JWT_REFRESH_EXPIRES_IN: process.env.JWT_REFRESH_EXPIRES_IN || "7d",
+
+  MFA_ENCRYPTION_KEY: process.env.MFA_ENCRYPTION_KEY,
 
   CLIENT_ORIGINS: (process.env.CLIENT_ORIGINS || "http://localhost:3000")
     .split(",")

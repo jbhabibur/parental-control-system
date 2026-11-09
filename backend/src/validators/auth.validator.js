@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+// ========== Parent Registration Validation ==========
 export const registerSchema = z.object({
   name: z
     .string()
@@ -15,12 +16,21 @@ export const registerSchema = z.object({
     .max(72, "Password cannot exceed 72 characters"),
 });
 
+// ========== User Login Validation ==========
 export const loginSchema = z.object({
   email: z.string().trim().email("Invalid email address"),
 
   password: z.string().min(1, "Password is required").max(72),
 });
 
+// ========== Refresh Token Validation ==========
 export const refreshTokenSchema = z.object({
   refreshToken: z.string().min(1, "Refresh token is required"),
+});
+
+// ========== MFA Login Verification ==========
+export const verifyLoginMfaSchema = z.object({
+  challengeToken: z.string().min(1, "MFA challenge token is required"),
+
+  token: z.string().regex(/^\d{6}$/, "OTP must be exactly 6 digits"),
 });

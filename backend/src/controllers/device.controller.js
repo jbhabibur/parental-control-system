@@ -5,7 +5,9 @@ import {
   removeParentDevice,
 } from "../services/device.service.js";
 
-// Get all devices of parent's children
+import { createAuditLog } from "../services/audit-log.service.js";
+
+// ========== Get All Parent Devices ==========
 export const getDevices = async (req, res, next) => {
   try {
     const devices = await getParentDevices(req.user.id);
@@ -20,7 +22,7 @@ export const getDevices = async (req, res, next) => {
   }
 };
 
-// Get device details
+// ========== Get Device Details ==========
 export const getDeviceDetails = async (req, res, next) => {
   try {
     const { deviceId } = req.params;
@@ -37,7 +39,7 @@ export const getDeviceDetails = async (req, res, next) => {
   }
 };
 
-// Update device status
+// ========== Update Device Status ==========
 export const updateDeviceStatus = async (req, res, next) => {
   try {
     const { deviceId } = req.params;
@@ -49,6 +51,16 @@ export const updateDeviceStatus = async (req, res, next) => {
       status,
     );
 
+    await createAuditLog({
+      actorId: req.user.id,
+      deviceId,
+      action: "DEVICE_STATUS_UPDATED",
+      entityType: "Device",
+      entityId: deviceId,
+      metadata: { status },
+      ipAddress: req.ip,
+    });
+
     return res.status(200).json({
       success: true,
       message: "Device status updated successfully",
@@ -59,12 +71,21 @@ export const updateDeviceStatus = async (req, res, next) => {
   }
 };
 
-// Remove device
+// ========== Remove Device ==========
 export const removeDevice = async (req, res, next) => {
   try {
     const { deviceId } = req.params;
 
     const device = await removeParentDevice(req.user.id, deviceId);
+
+    await createAuditLog({
+      actorId: req.user.id,
+      deviceId,
+      action: "DEVICE_REMOVED",
+      entityType: "Device",
+      entityId: deviceId,
+      ipAddress: req.ip,
+    });
 
     return res.status(200).json({
       success: true,

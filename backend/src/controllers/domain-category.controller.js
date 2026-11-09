@@ -6,10 +6,23 @@ import {
   deleteDomainCategory,
 } from "../services/domain-category.service.js";
 
+import { createAuditLog } from "../services/audit-log.service.js";
+
 // ========== Create Domain Category ==========
 export const createCategory = async (req, res) => {
   try {
     const data = await createDomainCategory(req.body);
+
+    await createAuditLog({
+      actorId: req.user.id,
+      action: "DOMAIN_CATEGORY_CREATED",
+      entityType: "DomainCategory",
+      entityId: data.id,
+      metadata: {
+        name: data.name,
+      },
+      ipAddress: req.ip,
+    });
 
     return res.status(201).json({
       success: true,
@@ -65,6 +78,17 @@ export const updateCategory = async (req, res) => {
   try {
     const data = await updateDomainCategory(req.params.categoryId, req.body);
 
+    await createAuditLog({
+      actorId: req.user.id,
+      action: "DOMAIN_CATEGORY_UPDATED",
+      entityType: "DomainCategory",
+      entityId: req.params.categoryId,
+      metadata: {
+        name: data.name,
+      },
+      ipAddress: req.ip,
+    });
+
     return res.status(200).json({
       success: true,
       message: "Domain category updated successfully",
@@ -82,6 +106,14 @@ export const updateCategory = async (req, res) => {
 export const deleteCategory = async (req, res) => {
   try {
     await deleteDomainCategory(req.params.categoryId);
+
+    await createAuditLog({
+      actorId: req.user.id,
+      action: "DOMAIN_CATEGORY_DELETED",
+      entityType: "DomainCategory",
+      entityId: req.params.categoryId,
+      ipAddress: req.ip,
+    });
 
     return res.status(200).json({
       success: true,

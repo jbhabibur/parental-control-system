@@ -5,6 +5,8 @@ import {
   getDeviceCommandHistory,
 } from "../services/remote-command.service.js";
 
+import { createAuditLog } from "../services/audit-log.service.js";
+
 // ========== Create Remote Command (PARENT) ==========
 export const createCommand = async (req, res) => {
   try {
@@ -13,6 +15,18 @@ export const createCommand = async (req, res) => {
       req.params.deviceId,
       req.body,
     );
+
+    await createAuditLog({
+      actorId: req.user.id,
+      deviceId: req.params.deviceId,
+      action: "REMOTE_COMMAND_CREATED",
+      entityType: "RemoteCommand",
+      entityId: data.id,
+      metadata: {
+        commandType: data.commandType,
+      },
+      ipAddress: req.ip,
+    });
 
     return res.status(201).json({
       success: true,
@@ -67,7 +81,7 @@ export const updateDeviceCommandStatus = async (req, res) => {
   }
 };
 
-// ================ Get Device Command History (PARENT) ==========
+// ========== Get Device Command History (PARENT) ==========
 export const getCommandHistory = async (req, res) => {
   try {
     const data = await getDeviceCommandHistory(

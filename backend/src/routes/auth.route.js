@@ -3,6 +3,7 @@ import express from "express";
 import {
   register,
   login,
+  verifyMfaLogin,
   refresh,
   logout,
   getCurrentUser,
@@ -12,6 +13,7 @@ import {
   registerSchema,
   loginSchema,
   refreshTokenSchema,
+  verifyLoginMfaSchema,
 } from "../validators/auth.validator.js";
 
 import { validate } from "../middlewares/validate.middleware.js";
@@ -20,22 +22,29 @@ import { authorize } from "../middlewares/role.middleware.js";
 
 const router = express.Router();
 
-// Parent registration
+// ========== Parent Registration ==========
 router.post("/register", validate(registerSchema), register);
 
-// User login
+// ========== User Login ==========
 router.post("/login", validate(loginSchema), login);
 
-// Refresh token
+// ========== MFA Login Verification ==========
+router.post(
+  "/mfa/verify-login",
+  validate(verifyLoginMfaSchema),
+  verifyMfaLogin,
+);
+
+// ========== Refresh Token ==========
 router.post("/refresh", validate(refreshTokenSchema), refresh);
 
-// User logout
+// ========== User Logout ==========
 router.post("/logout", validate(refreshTokenSchema), logout);
 
-// Protected profile
+// ========== Protected Profile ==========
 router.get("/me", authenticate, getCurrentUser);
 
-// Parent-only profile
+// ========== Parent-Only Profile ==========
 router.get("/parent/me", authenticate, authorize("PARENT"), getCurrentUser);
 
 export default router;

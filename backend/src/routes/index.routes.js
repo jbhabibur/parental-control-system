@@ -16,6 +16,12 @@ import remoteCommandRouter from "./remote-command.route.js";
 import dnsPolicyRouter from "./dns-policy.route.js";
 import domainCategoryRouter from "./domain-category.route.js";
 import browserHistoryRouter from "./browser-history.route.js";
+import securityAlertRouter from "./security-alert.route.js";
+import notificationRouter from "./notification.route.js";
+import locationRouter from "./location.route.js";
+import appPolicyRouter from "./app-policy.route.js";
+import mfaRouter from "./mfa.route.js";
+import auditLogRouter from "./audit-log.route.js";
 
 const router = express.Router();
 
@@ -66,5 +72,23 @@ router.use("/", domainCategoryRouter);
 
 // Browser History Management APIs
 router.use("/", browserHistoryRouter);
+
+// Security Alert Management APIs
+router.use("/", securityAlertRouter);
+
+// Notification Management APIs
+router.use("/", notificationRouter);
+
+// Location Tracking APIs
+router.use("/", locationRouter);
+
+// Application Management APIs
+router.use("/", appPolicyRouter);
+
+// MFA / 2FA Management APIs
+router.use("/auth/mfa", mfaRouter);
+
+// Audit Log Management APIs
+router.use("/", auditLogRouter);
 
 export default router;

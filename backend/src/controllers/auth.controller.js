@@ -1,14 +1,25 @@
 import {
   registerUser,
   loginUser,
+  verifyLoginMfa,
   refreshUserToken,
   logoutUser,
 } from "../services/auth.service.js";
 
-// ========== Parent registration ==========
+import { createAuditLog } from "../services/audit-log.service.js";
+
+// ========== Parent Registration ==========
 export const register = async (req, res, next) => {
   try {
     const result = await registerUser(req.body, req);
+
+    await createAuditLog({
+      actorId: result.user.id,
+      action: "PARENT_REGISTERED",
+      entityType: "User",
+      entityId: result.user.id,
+      ipAddress: req.ip,
+    });
 
     return res.status(201).json({
       success: true,
@@ -20,10 +31,34 @@ export const register = async (req, res, next) => {
   }
 };
 
-// ========== User login ==========
+// ========== User Login ==========
 export const login = async (req, res, next) => {
   try {
     const result = await loginUser(req.body, req);
+
+    if (result.mfaRequired) {
+      await createAuditLog({
+        actorId: result.user.id,
+        action: "LOGIN_MFA_CHALLENGE_ISSUED",
+        entityType: "User",
+        entityId: result.user.id,
+        ipAddress: req.ip,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "MFA verification required",
+        ...result,
+      });
+    }
+
+    await createAuditLog({
+      actorId: result.user.id,
+      action: "USER_LOGIN",
+      entityType: "User",
+      entityId: result.user.id,
+      ipAddress: req.ip,
+    });
 
     return res.status(200).json({
       success: true,
@@ -35,7 +70,32 @@ export const login = async (req, res, next) => {
   }
 };
 
-// ========== Refresh access token ==========
+// ========== Verify MFA Login ==========
+export const verifyMfaLogin = async (req, res, next) => {
+  try {
+    const { challengeToken, token } = req.body;
+
+    const result = await verifyLoginMfa(challengeToken, token, req);
+
+    await createAuditLog({
+      actorId: result.user.id,
+      action: "USER_LOGIN_MFA_VERIFIED",
+      entityType: "User",
+      entityId: result.user.id,
+      ipAddress: req.ip,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "MFA verification successful",
+      ...result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ========== Refresh Access Token ==========
 export const refresh = async (req, res, next) => {
   try {
     const { refreshToken } = req.body;
@@ -52,7 +112,7 @@ export const refresh = async (req, res, next) => {
   }
 };
 
-// ========== User logout ==========
+// ========== User Logout ==========
 export const logout = async (req, res, next) => {
   try {
     const { refreshToken } = req.body;
@@ -68,7 +128,7 @@ export const logout = async (req, res, next) => {
   }
 };
 
-// ========== Get authenticated user profile ==========
+// ========== Get Authenticated User Profile ==========
 export const getCurrentUser = async (req, res) => {
   return res.status(200).json({
     success: true,

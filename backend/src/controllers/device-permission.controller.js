@@ -3,7 +3,9 @@ import {
   updateDevicePermission,
 } from "../services/device-permission.service.js";
 
-// Get device permissions
+import { createAuditLog } from "../services/audit-log.service.js";
+
+// ========== Get Device Permissions ==========
 export const getPermissions = async (req, res, next) => {
   try {
     const { deviceId } = req.params;
@@ -20,7 +22,7 @@ export const getPermissions = async (req, res, next) => {
   }
 };
 
-// Update device permission
+// ========== Update Device Permission ==========
 export const updatePermission = async (req, res, next) => {
   try {
     const { deviceId, permissionId } = req.params;
@@ -32,6 +34,16 @@ export const updatePermission = async (req, res, next) => {
       permissionId,
       allowed,
     );
+
+    await createAuditLog({
+      actorId: req.user.id,
+      deviceId,
+      action: "DEVICE_PERMISSION_UPDATED",
+      entityType: "DevicePermission",
+      entityId: permissionId,
+      metadata: { allowed },
+      ipAddress: req.ip,
+    });
 
     return res.status(200).json({
       success: true,
