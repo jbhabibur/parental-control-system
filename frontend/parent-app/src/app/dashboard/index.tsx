@@ -1,9 +1,59 @@
 import { Link, router } from "expo-router";
 import { SymbolView } from "expo-symbols";
+import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { C, Card, Screen } from "../../components/ui";
+import { api, clearTokens } from "../../lib/api";
 
 export default function DashboardScreen() {
+  const [parentName, setParentName] = useState("");
+  const [deviceCount, setDeviceCount] = useState<number | null>(null);
+  const [pendingCount, setPendingCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void Promise.all([
+      api.auth.parentMe(),
+      api.devices.list(),
+      api.permissionRequests.list(),
+    ])
+      .then(([profile, deviceResult, requestResult]) => {
+        if (!active) return;
+        const user = profile.user as { name?: string } | undefined;
+        setParentName(user?.name || "");
+        setDeviceCount(
+          Array.isArray(deviceResult.data) ? deviceResult.data.length : 0,
+        );
+        const requests = Array.isArray(requestResult.data)
+          ? (requestResult.data as Array<{ status?: string }>)
+          : [];
+        setPendingCount(
+          requests.filter((item) => item.status === "PENDING").length,
+        );
+      })
+      .catch(async () => {
+        if (!active) return;
+        await clearTokens("user");
+        router.replace("/auth/login");
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const logout = async () => {
+    try {
+      const { getRefreshToken } = await import("../../lib/api");
+      const refreshToken = await getRefreshToken("user");
+      if (refreshToken) await api.auth.logout(refreshToken);
+    } catch {
+      // Local logout still proceeds if the backend is unreachable.
+    } finally {
+      await clearTokens("user");
+      router.replace("/auth/login");
+    }
+  };
+
   return (
     <Screen>
       <View
@@ -33,7 +83,7 @@ export default function DashboardScreen() {
               marginTop: 5,
             }}
           >
-            Good morning
+            {parentName ? `Hello, ${parentName}` : "Family overview"}
           </Text>
         </View>
         <View style={{ flexDirection: "row", gap: 8 }}>
@@ -60,7 +110,7 @@ export default function DashboardScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Log out"
-            onPress={() => router.replace("/auth/login")}
+            onPress={() => void logout()}
             style={{
               width: 46,
               height: 46,
@@ -73,7 +123,11 @@ export default function DashboardScreen() {
             }}
           >
             <SymbolView
-              name={{ ios: "rectangle.portrait.and.arrow.right", android: "logout", web: "logout" }}
+              name={{
+                ios: "rectangle.portrait.and.arrow.right",
+                android: "logout",
+                web: "logout",
+              }}
               tintColor={C.navy}
               size={20}
             />
@@ -108,7 +162,7 @@ export default function DashboardScreen() {
             }}
           >
             <Text style={{ color: "#DDE9FF", fontSize: 10, fontWeight: "800" }}>
-              PREVIEW
+              LIVE
             </Text>
           </View>
         </View>
@@ -120,10 +174,12 @@ export default function DashboardScreen() {
             marginTop: 14,
           }}
         >
-          One child device
+          {deviceCount === null
+            ? "Loading devices..."
+            : `${deviceCount} linked ${deviceCount === 1 ? "device" : "devices"}`}
         </Text>
         <Text style={{ color: "#C5D2E8", fontSize: 13, marginTop: 5 }}>
-          Sample data for interface preview
+          Current parent account summary
         </Text>
         <View
           style={{ height: 1, backgroundColor: "#3D4B65", marginVertical: 17 }}
@@ -139,7 +195,7 @@ export default function DashboardScreen() {
                 marginTop: 5,
               }}
             >
-              2h 18m
+              {deviceCount ?? "—"}
             </Text>
           </View>
           <View style={{ flex: 1 }}>
@@ -152,7 +208,7 @@ export default function DashboardScreen() {
                 marginTop: 5,
               }}
             >
-              1h 42m
+              {pendingCount ?? "—"}
             </Text>
           </View>
         </View>
@@ -293,8 +349,7 @@ export default function DashboardScreen() {
           marginTop: 9,
         }}
       >
-        Preview only. No child device is connected and actions are not sent to a
-        backend.
+        Values on this dashboard come from the connected backend.
       </Text>
     </Screen>
   );

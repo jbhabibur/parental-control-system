@@ -1,261 +1,93 @@
 import { router } from "expo-router";
-import { useState } from "react";
-import { Alert, Pressable, Switch, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, Alert, Image, Pressable, Text, View } from "react-native";
 import { C, PageHeader, Screen } from "../../components/ui";
+import { ApiError, api, clearTokens, getRefreshToken } from "../../lib/api";
+
+type ParentProfile = { name?: string; email?: string; role?: string };
 
 export default function SettingsScreen() {
+  const [profile, setProfile] = useState<ParentProfile | null>(null);
   const [mfaEnabled, setMfaEnabled] = useState(false);
-  const [biometricsEnabled, setBiometricsEnabled] = useState(true);
-  const [alertsEnabled, setAlertsEnabled] = useState(true);
+  const [mfaQrCode, setMfaQrCode] = useState("");
+  const [mfaSecret, setMfaSecret] = useState("");
+  const [health, setHealth] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
-  const showNotConnected = (feature: string) =>
-    Alert.alert(
-      "Not connected",
-      `${feature} will be available when account services are integrated.`,
-    );
+  useEffect(() => {
+    let active = true;
+    void Promise.all([api.auth.parentMe(), api.mfa.status(), api.health()]).then(([profileResult, mfaResult, healthResult]) => {
+      if (!active) return;
+      setProfile(profileResult.user as ParentProfile);
+      const status = mfaResult.data as { enabled?: boolean } | undefined;
+      setMfaEnabled(Boolean(status?.enabled));
+      setHealth(String(healthResult.status || "Unknown"));
+    }).catch((requestError) => {
+      if (active) setError(requestError instanceof ApiError ? requestError.message : "Unable to load account settings.");
+    }).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
+
+  const setupMfa = async () => {
+    setBusy(true);
+    try {
+      const result = await api.mfa.setup();
+      const data = result.data as { qrCode?: string; secret?: string } | undefined;
+      setMfaQrCode(data?.qrCode || "");
+      setMfaSecret(data?.secret || "");
+    } catch (requestError) {
+      Alert.alert("Could not set up MFA", requestError instanceof ApiError ? requestError.message : "Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const logout = async () => {
+    try {
+      const refreshToken = await getRefreshToken("user");
+      if (refreshToken) await api.auth.logout(refreshToken);
+    } catch {
+      setError("The server could not be reached. Local sign-in credentials were still cleared.");
+    } finally {
+      await clearTokens("user");
+      router.replace("/auth/login");
+    }
+  };
+
+  const navigate = (label: string, href: "/notifications" | "/location" | "/app-policies") => (
+    <Pressable key={label} onPress={() => router.push(href)} style={{ minHeight: 48, borderBottomWidth: 1, borderBottomColor: C.border, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+      <Text style={{ color: C.navy, fontWeight: "700" }}>{label}</Text><Text style={{ color: C.blue, fontSize: 20 }}>›</Text>
+    </Pressable>
+  );
 
   return (
     <Screen>
-      <PageHeader
-        title="Settings"
-        subtitle="Manage your parent account and security preferences."
-      />
-      <View
-        style={{
-          backgroundColor: "#FFF8E9",
-          borderColor: "#F1E3C5",
-          borderWidth: 1,
-          borderRadius: 14,
-          padding: 13,
-          marginBottom: 18,
-        }}
-      >
-        <Text style={{ color: "#72551A", fontSize: 12, lineHeight: 18 }}>
-          Preview preferences only. Authentication, encryption, and notification
-          settings are not backed by account services yet.
-        </Text>
+      <PageHeader title="Settings" subtitle="Parent account and security status." />
+      {loading && <ActivityIndicator color={C.blue} />}
+      {!!error && <Text accessibilityRole="alert" style={{ color: C.red, marginBottom: 10 }}>{error}</Text>}
+      <View style={{ backgroundColor: C.white, borderWidth: 1, borderColor: C.border, borderRadius: 14, padding: 15, marginBottom: 18 }}>
+        <Text style={{ color: C.navy, fontWeight: "900" }}>Parent account</Text>
+        <Text style={{ color: C.text, marginTop: 8 }}>{profile?.name || "—"}</Text>
+        <Text style={{ color: C.muted, fontSize: 12, marginTop: 4 }}>{profile?.email || ""} · {profile?.role || ""}</Text>
       </View>
-
-      <Text
-        style={{
-          color: C.navy,
-          fontSize: 15,
-          fontWeight: "900",
-          marginBottom: 9,
-        }}
-      >
-        Parent account
-      </Text>
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => showNotConnected("Account profile")}
-        style={{
-          backgroundColor: C.white,
-          borderWidth: 1,
-          borderColor: C.border,
-          borderRadius: 15,
-          padding: 15,
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 12,
-          marginBottom: 18,
-        }}
-      >
-        <View
-          style={{
-            width: 44,
-            height: 44,
-            borderRadius: 15,
-            backgroundColor: "#EAF0F8",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <Text style={{ color: C.navy, fontSize: 17, fontWeight: "900" }}>
-            P
-          </Text>
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={{ color: C.navy, fontSize: 13, fontWeight: "800" }}>
-            Parent profile
-          </Text>
-          <Text style={{ color: C.muted, fontSize: 11, marginTop: 4 }}>
-            Sign in to connect your account
-          </Text>
-        </View>
-        <Text style={{ color: C.muted, fontSize: 20 }}>›</Text>
-      </Pressable>
-
-      <Text
-        style={{
-          color: C.navy,
-          fontSize: 15,
-          fontWeight: "900",
-          marginBottom: 9,
-        }}
-      >
-        Sign-in security
-      </Text>
-      <View
-        style={{
-          backgroundColor: C.white,
-          borderWidth: 1,
-          borderColor: C.border,
-          borderRadius: 15,
-          paddingHorizontal: 14,
-          marginBottom: 18,
-        }}
-      >
-        {[
-          {
-            title: "Two-factor authentication",
-            note: "Require a second sign-in step",
-            value: mfaEnabled,
-            change: setMfaEnabled,
-          },
-          {
-            title: "Biometric unlock",
-            note: "Use Face ID or fingerprint on this device",
-            value: biometricsEnabled,
-            change: setBiometricsEnabled,
-          },
-        ].map((setting, index) => (
-          <View
-            key={setting.title}
-            style={{
-              minHeight: 66,
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
-              borderBottomWidth: index === 0 ? 1 : 0,
-              borderBottomColor: C.border,
-            }}
-          >
-            <View style={{ flex: 1, paddingRight: 8 }}>
-              <Text style={{ color: C.navy, fontSize: 12, fontWeight: "800" }}>
-                {setting.title}
-              </Text>
-              <Text style={{ color: C.muted, fontSize: 10, marginTop: 4 }}>
-                {setting.note}
-              </Text>
-            </View>
-            <Switch
-              value={setting.value}
-              onValueChange={setting.change}
-              trackColor={{ false: "#DCE2E9", true: "#8BC7A5" }}
-              thumbColor={setting.value ? "#28744D" : "#FFFFFF"}
-              accessibilityLabel={`Preview ${setting.title}`}
-            />
-          </View>
-        ))}
+      <Text style={{ color: C.navy, fontSize: 15, fontWeight: "900", marginBottom: 8 }}>Account security</Text>
+      <View style={{ backgroundColor: C.white, borderWidth: 1, borderColor: C.border, borderRadius: 14, padding: 15, marginBottom: 18 }}>
+        <Text style={{ color: C.text, fontWeight: "800" }}>Multi-factor authentication</Text>
+        <Text style={{ color: mfaEnabled ? C.green : C.muted, fontSize: 12, marginTop: 5 }}>{mfaEnabled ? "Enabled" : "Not enabled"}</Text>
+        {!mfaEnabled && <Pressable disabled={busy} onPress={() => void setupMfa()} style={{ alignSelf: "flex-start", minHeight: 40, justifyContent: "center" }}><Text style={{ color: C.blue, fontWeight: "800" }}>{busy ? "Preparing..." : "Set up authenticator"}</Text></Pressable>}
+        {!!mfaQrCode && <View style={{ alignItems: "flex-start", marginTop: 10 }}><Image source={{ uri: mfaQrCode }} style={{ width: 180, height: 180 }} /><Text selectable style={{ color: C.navy, fontSize: 12, marginTop: 8 }}>Secret: {mfaSecret}</Text></View>}
+        <Text style={{ color: C.muted, fontSize: 11, lineHeight: 17, marginTop: 7 }}>The backend currently rejects the normal MFA enable/disable body during validation, so setup cannot be completed until that backend issue is fixed.</Text>
       </View>
-
-      <Text
-        style={{
-          color: C.navy,
-          fontSize: 15,
-          fontWeight: "900",
-          marginBottom: 9,
-        }}
-      >
-        Notifications
-      </Text>
-      <View
-        style={{
-          backgroundColor: C.white,
-          borderWidth: 1,
-          borderColor: C.border,
-          borderRadius: 15,
-          paddingHorizontal: 14,
-          marginBottom: 18,
-        }}
-      >
-        <View
-          style={{
-            minHeight: 65,
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <View style={{ flex: 1, paddingRight: 8 }}>
-            <Text style={{ color: C.navy, fontSize: 12, fontWeight: "800" }}>
-              Safety alerts
-            </Text>
-            <Text style={{ color: C.muted, fontSize: 10, marginTop: 4 }}>
-              Blocked content and permission requests
-            </Text>
-          </View>
-          <Switch
-            value={alertsEnabled}
-            onValueChange={setAlertsEnabled}
-            trackColor={{ false: "#DCE2E9", true: "#8BC7A5" }}
-            thumbColor={alertsEnabled ? "#28744D" : "#FFFFFF"}
-            accessibilityLabel="Preview safety alerts"
-          />
-        </View>
+      <Text style={{ color: C.navy, fontSize: 15, fontWeight: "900", marginBottom: 8 }}>Family data</Text>
+      <View style={{ backgroundColor: C.white, borderWidth: 1, borderColor: C.border, borderRadius: 14, paddingHorizontal: 14, marginBottom: 18 }}>
+        {navigate("Notifications", "/notifications")}
+        {navigate("Device locations", "/location")}
+        {navigate("Application policies", "/app-policies")}
       </View>
-
-      <Text
-        style={{
-          color: C.navy,
-          fontSize: 15,
-          fontWeight: "900",
-          marginBottom: 9,
-        }}
-      >
-        Data & connection
-      </Text>
-      <View
-        style={{
-          backgroundColor: C.white,
-          borderWidth: 1,
-          borderColor: C.border,
-          borderRadius: 15,
-          padding: 15,
-          marginBottom: 18,
-        }}
-      >
-        {[
-          { title: "Encrypted connection", value: "Not configured" },
-          { title: "Certificate pinning", value: "Backend required" },
-          { title: "Privacy policy", value: "Add before release" },
-        ].map((item, index) => (
-          <View
-            key={item.title}
-            style={{
-              minHeight: 43,
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
-              borderBottomWidth: index === 2 ? 0 : 1,
-              borderBottomColor: C.border,
-            }}
-          >
-            <Text style={{ color: C.text, fontSize: 11 }}>{item.title}</Text>
-            <Text style={{ color: C.muted, fontSize: 10, fontWeight: "700" }}>
-              {item.value}
-            </Text>
-          </View>
-        ))}
-      </View>
-
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => router.replace("/auth/login")}
-        style={{
-          minHeight: 47,
-          borderRadius: 13,
-          borderWidth: 1,
-          borderColor: "#E7C9C4",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <Text style={{ color: C.red, fontSize: 12, fontWeight: "800" }}>
-          Sign out
-        </Text>
-      </Pressable>
+      <View style={{ backgroundColor: C.white, borderWidth: 1, borderColor: C.border, borderRadius: 12, padding: 13, marginBottom: 18 }}><Text style={{ color: C.muted, fontSize: 11 }}>Backend status</Text><Text style={{ color: health === "Healthy" ? C.green : C.text, fontWeight: "800", marginTop: 4 }}>{health || "Checking..."}</Text></View>
+      <Pressable accessibilityRole="button" onPress={() => void logout()} style={{ minHeight: 47, borderRadius: 12, borderWidth: 1, borderColor: "#E7C9C4", alignItems: "center", justifyContent: "center" }}><Text style={{ color: C.red, fontSize: 12, fontWeight: "800" }}>Sign out</Text></Pressable>
     </Screen>
   );
 }

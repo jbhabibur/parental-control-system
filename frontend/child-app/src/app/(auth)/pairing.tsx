@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 
 import {
@@ -8,13 +7,65 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  Alert,
+  Platform,
 } from "react-native";
 
 import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import * as Device from "expo-device";
+import Constants from "expo-constants";
+import {
+  ApiError,
+  api,
+  getOrCreateDeviceIdentifier,
+  saveTokens,
+} from "../../lib/api";
 
 export default function PairingScreen() {
   const [pairingCode, setPairingCode] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const completePairing = async () => {
+    const code = pairingCode.replace(/\D/g, "");
+    if (code.length !== 6) {
+      Alert.alert(
+        "Invalid code",
+        "Enter the 6-digit pairing code from the parent app.",
+      );
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await api.pairing.complete({
+        pairingCode: code,
+        deviceIdentifier: await getOrCreateDeviceIdentifier(),
+        deviceName: Device.deviceName || Device.modelName || "Child device",
+        platform: Platform.OS === "ios" ? "IOS" : "ANDROID",
+        osVersion: Device.osVersion || undefined,
+        appVersion: Constants.expoConfig?.version || undefined,
+      });
+      const session = result.data as
+        | { accessToken?: string; refreshToken?: string }
+        | undefined;
+      if (!session?.accessToken || !session.refreshToken)
+        throw new Error("The server did not return device credentials.");
+      await saveTokens("device", {
+        accessToken: session.accessToken,
+        refreshToken: session.refreshToken,
+      });
+      router.replace("/monitoring-status");
+    } catch (error) {
+      Alert.alert(
+        "Pairing failed",
+        error instanceof ApiError
+          ? error.message
+          : "Unable to pair this device. Please check the code and try again.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -49,8 +100,7 @@ export default function PairingScreen() {
         <Text style={styles.title}>Connect to Parent</Text>
 
         <Text style={styles.subtitle}>
-          Connect your device to your parent's account
-          to get started.
+          Connect your device to your parent's account to get started.
         </Text>
 
         {/* Pairing Card */}
@@ -58,8 +108,8 @@ export default function PairingScreen() {
           <Text style={styles.cardTitle}>Device Pairing</Text>
 
           <Text style={styles.description}>
-            Ask your parent to open the Parent App and
-            provide you with the pairing code.
+            Ask your parent to open the Parent App and provide you with the
+            pairing code.
           </Text>
 
           <Text style={styles.label}>Pairing Code</Text>
@@ -70,25 +120,24 @@ export default function PairingScreen() {
             placeholderTextColor="#94A3B8"
             value={pairingCode}
             onChangeText={setPairingCode}
-            autoCapitalize="characters"
+            keyboardType="number-pad"
+            maxLength={6}
           />
 
           <TouchableOpacity
             style={styles.connectButton}
             activeOpacity={0.8}
-            onPress={() => router.push("/(auth)/device-registration")}
+            onPress={completePairing}
           >
             <Text style={styles.connectButtonText}>
-              Connect to Parent →
+              {busy ? "Connecting..." : "Connect to Parent →"}
             </Text>
           </TouchableOpacity>
         </View>
 
         {/* Footer */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            ChildSafe Parental Control
-          </Text>
+          <Text style={styles.footerText}>ChildSafe Parental Control</Text>
 
           <Text style={styles.version}>Version 1.0.0</Text>
         </View>

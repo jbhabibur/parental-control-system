@@ -1,5 +1,4 @@
-
-import React from "react";
+import React, { useEffect, useState } from "react";
 
 import {
   View,
@@ -7,10 +6,13 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
+  TextInput,
+  Alert,
 } from "react-native";
 
 import { StatusBar } from "expo-status-bar";
 import { router } from "expo-router";
+import { ApiError, api } from "../lib/api";
 
 const permissionItems = [
   {
@@ -41,12 +43,70 @@ const permissionItems = [
   {
     icon: "🔧",
     title: "Hardware Resources",
-    description:
-      "Only parent-approved hardware resources are accessible.",
+    description: "Only parent-approved hardware resources are accessible.",
   },
 ];
 
 export default function PermissionsScreen() {
+  const [requestType, setRequestType] = useState("HARDWARE_PERMISSION");
+  const [resource, setResource] = useState("CAMERA");
+  const [reason, setReason] = useState("");
+  const [requests, setRequests] = useState<
+    Array<{
+      id: string;
+      requestType: string;
+      resource: string;
+      reason?: string;
+      status: string;
+    }>
+  >([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadRequests = async () => {
+    try {
+      const result = await api.permissionRequests.mine();
+      setRequests(
+        Array.isArray(result.data) ? (result.data as typeof requests) : [],
+      );
+    } catch (error) {
+      if (error instanceof ApiError)
+        Alert.alert("Could not load requests", error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadRequests();
+  }, []);
+
+  const submitRequest = async () => {
+    if (!resource.trim()) {
+      Alert.alert(
+        "Resource required",
+        "Enter the app, domain, or hardware permission you need.",
+      );
+      return;
+    }
+    try {
+      await api.permissionRequests.create({
+        requestType,
+        resource: resource.trim(),
+        reason: reason.trim() || undefined,
+      });
+      setReason("");
+      await loadRequests();
+      Alert.alert("Request sent", "Your parent can now review the request.");
+    } catch (error) {
+      Alert.alert(
+        "Could not send request",
+        error instanceof ApiError
+          ? error.message
+          : "Pair this device and try again.",
+      );
+    }
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar style="dark" />
@@ -81,37 +141,131 @@ export default function PermissionsScreen() {
         <Text style={styles.title}>Permission Setup</Text>
 
         <Text style={styles.subtitle}>
-          Your device access is controlled by your parent.
-          Restricted resources require parent approval.
+          Your device access is controlled by your parent. Restricted resources
+          require parent approval.
         </Text>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Ask for access</Text>
+          <View
+            style={{
+              flexDirection: "row",
+              flexWrap: "wrap",
+              gap: 7,
+              marginBottom: 12,
+            }}
+          >
+            {["HARDWARE_PERMISSION", "APPLICATION_ACCESS", "DOMAIN_ACCESS"].map(
+              (type) => (
+                <TouchableOpacity
+                  key={type}
+                  onPress={() => setRequestType(type)}
+                  style={{
+                    borderWidth: 1,
+                    borderColor: requestType === type ? "#2563EB" : "#E2E8F0",
+                    backgroundColor:
+                      requestType === type ? "#EFF6FF" : "#FFFFFF",
+                    borderRadius: 9,
+                    padding: 8,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: "#1E293B",
+                      fontSize: 10,
+                      fontWeight: "700",
+                    }}
+                  >
+                    {type.replaceAll("_", " ")}
+                  </Text>
+                </TouchableOpacity>
+              ),
+            )}
+          </View>
+          <TextInput
+            value={resource}
+            onChangeText={setResource}
+            placeholder="CAMERA, app identifier, or domain"
+            autoCapitalize="none"
+            style={{
+              borderWidth: 1,
+              borderColor: "#E2E8F0",
+              borderRadius: 10,
+              padding: 11,
+              marginBottom: 9,
+              color: "#1E293B",
+            }}
+          />
+          <TextInput
+            value={reason}
+            onChangeText={setReason}
+            placeholder="Reason (optional)"
+            multiline
+            style={{
+              minHeight: 65,
+              borderWidth: 1,
+              borderColor: "#E2E8F0",
+              borderRadius: 10,
+              padding: 11,
+              marginBottom: 10,
+              color: "#1E293B",
+              textAlignVertical: "top",
+            }}
+          />
+          <TouchableOpacity
+            style={styles.continueButton}
+            onPress={() => void submitRequest}
+          >
+            <Text style={styles.continueButtonText}>
+              Send permission request
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={[styles.card, { marginTop: 14 }]}>
+          <Text style={styles.cardTitle}>
+            My requests {loading ? "· Loading" : `· ${requests.length}`}
+          </Text>
+          {requests.map((request) => (
+            <View
+              key={request.id}
+              style={{
+                paddingVertical: 11,
+                borderTopWidth: 1,
+                borderTopColor: "#E2E8F0",
+              }}
+            >
+              <Text style={styles.itemTitle}>
+                {request.resource} · {request.status}
+              </Text>
+              <Text style={styles.itemDescription}>
+                {request.requestType.replaceAll("_", " ")}
+                {request.reason ? ` · ${request.reason}` : ""}
+              </Text>
+            </View>
+          ))}
+          {!loading && requests.length === 0 && (
+            <Text style={styles.itemDescription}>No requests yet.</Text>
+          )}
+        </View>
 
         {/* Permission Card */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>
-            Access Categories
-          </Text>
+          <Text style={styles.cardTitle}>Access Categories</Text>
 
           {permissionItems.map((item, index) => (
             <View key={item.title}>
               <View style={styles.permissionRow}>
                 <View style={styles.itemIconContainer}>
-                  <Text style={styles.itemIcon}>
-                    {item.icon}
-                  </Text>
+                  <Text style={styles.itemIcon}>{item.icon}</Text>
                 </View>
 
                 <View style={styles.itemInfo}>
-                  <Text style={styles.itemTitle}>
-                    {item.title}
-                  </Text>
+                  <Text style={styles.itemTitle}>{item.title}</Text>
 
-                  <Text style={styles.itemDescription}>
-                    {item.description}
-                  </Text>
+                  <Text style={styles.itemDescription}>{item.description}</Text>
 
-                  <Text style={styles.status}>
-                    Parent approval required
-                  </Text>
+                  <Text style={styles.status}>Parent approval required</Text>
                 </View>
               </View>
 
@@ -127,10 +281,9 @@ export default function PermissionsScreen() {
           <Text style={styles.noticeIcon}>ℹ️</Text>
 
           <Text style={styles.noticeText}>
-            If you try to access a restricted application
-            or resource, a permission request will be sent
-            to your parent. Access is allowed only after
-            approval.
+            If you try to access a restricted application or resource, a
+            permission request will be sent to your parent. Access is allowed
+            only after approval.
           </Text>
         </View>
 
@@ -140,20 +293,14 @@ export default function PermissionsScreen() {
           activeOpacity={0.8}
           onPress={() => router.push("/monitoring-status")}
         >
-          <Text style={styles.continueButtonText}>
-            Continue →
-          </Text>
+          <Text style={styles.continueButtonText}>Continue →</Text>
         </TouchableOpacity>
 
         {/* Footer */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            ChildSafe Parental Control
-          </Text>
+          <Text style={styles.footerText}>ChildSafe Parental Control</Text>
 
-          <Text style={styles.version}>
-            Version 1.0.0
-          </Text>
+          <Text style={styles.version}>Version 1.0.0</Text>
         </View>
       </ScrollView>
     </View>

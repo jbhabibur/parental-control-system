@@ -3,22 +3,57 @@ import { SymbolView } from "expo-symbols";
 import { useState } from "react";
 import { Alert, Pressable, Text, View } from "react-native";
 import { Button, C, Field, Screen } from "../../components/ui";
+import { ApiError, api, saveTokens } from "../../lib/api";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [challengeToken, setChallengeToken] = useState("");
+  const [verificationCode, setVerificationCode] = useState("");
 
-  const handleLogin = () => {
-    if (!email.trim() || !password.trim()) {
+  const handleLogin = async () => {
+    if (!email.trim() || !password) {
       Alert.alert(
         "Missing information",
         "Please enter your email and password.",
       );
       return;
     }
-    // UI demo only. Real authentication will be connected to the backend later.
-    router.replace("/dashboard");
+    setBusy(true);
+    try {
+      const result = challengeToken
+        ? await api.auth.verifyMfaLogin({
+            challengeToken,
+            token: verificationCode,
+          })
+        : await api.auth.login({ email: email.trim().toLowerCase(), password });
+      if (result.mfaRequired && typeof result.challengeToken === "string") {
+        setChallengeToken(result.challengeToken);
+        return;
+      }
+      if (
+        typeof result.accessToken !== "string" ||
+        typeof result.refreshToken !== "string"
+      ) {
+        throw new Error("The server did not return a valid login session.");
+      }
+      await saveTokens("user", {
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+      });
+      router.replace("/dashboard");
+    } catch (error) {
+      Alert.alert(
+        "Sign in failed",
+        error instanceof ApiError
+          ? error.message
+          : "Unable to sign in. Please try again.",
+      );
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -54,58 +89,78 @@ export default function LoginScreen() {
         </Text>
       </View>
 
-      <Field
-        label="Email address"
-        placeholder="name@example.com"
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
-      <Field
-        label="Password"
-        placeholder="Enter your password"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry={!showPassword}
-        rightAccessory={
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={
-              showPassword ? "Hide password" : "Show password"
-            }
-            accessibilityState={{ selected: showPassword }}
-            hitSlop={8}
-            onPress={() => setShowPassword((visible) => !visible)}
-            style={{
-              width: 44,
-              height: 44,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <SymbolView
-              name={{
-                ios: showPassword ? "eye.slash" : "eye",
-                android: showPassword ? "visibility_off" : "visibility",
-                web: showPassword ? "visibility_off" : "visibility",
+      {!challengeToken ? (
+        <Field
+          label="Email address"
+          placeholder="name@example.com"
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      ) : (
+        <Field
+          label="Authenticator code"
+          placeholder="6-digit code"
+          value={verificationCode}
+          onChangeText={setVerificationCode}
+          keyboardType="number-pad"
+          maxLength={6}
+        />
+      )}
+      {!challengeToken && (
+        <Field
+          label="Password"
+          placeholder="Enter your password"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry={!showPassword}
+          rightAccessory={
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={
+                showPassword ? "Hide password" : "Show password"
+              }
+              accessibilityState={{ selected: showPassword }}
+              hitSlop={8}
+              onPress={() => setShowPassword((visible) => !visible)}
+              style={{
+                width: 44,
+                height: 44,
+                alignItems: "center",
+                justifyContent: "center",
               }}
-              tintColor={C.muted}
-              size={21}
-            />
-          </Pressable>
-        }
-      />
+            >
+              <SymbolView
+                name={{
+                  ios: showPassword ? "eye.slash" : "eye",
+                  android: showPassword ? "visibility_off" : "visibility",
+                  web: showPassword ? "visibility_off" : "visibility",
+                }}
+                tintColor={C.muted}
+                size={21}
+              />
+            </Pressable>
+          }
+        />
+      )}
 
-      <Link href="/auth/forgot-password" asChild>
-        <Pressable style={{ alignSelf: "flex-end", marginBottom: 20 }}>
-          <Text style={{ color: C.blue, fontWeight: "700" }}>
-            Forgot password?
-          </Text>
-        </Pressable>
-      </Link>
-      <Button title="Sign In" onPress={handleLogin} />
+      {!challengeToken && (
+        <Link href="/auth/forgot-password" asChild>
+          <Pressable style={{ alignSelf: "flex-end", marginBottom: 20 }}>
+            <Text style={{ color: C.blue, fontWeight: "700" }}>
+              Forgot password?
+            </Text>
+          </Pressable>
+        </Link>
+      )}
+      <Button
+        title={
+          busy ? "Please wait..." : challengeToken ? "Verify code" : "Sign In"
+        }
+        onPress={handleLogin}
+      />
 
       <View
         style={{

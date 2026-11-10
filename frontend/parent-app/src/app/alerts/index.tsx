@@ -1,91 +1,67 @@
-import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, Alert, Pressable, Text, View } from "react-native";
 import { C, PageHeader, Screen } from "../../components/ui";
+import { ApiError, api } from "../../lib/api";
+
+type AlertItem = {
+  id: string;
+  type: string;
+  title: string;
+  description?: string | null;
+  severity?: string;
+  createdAt: string;
+  acknowledgedAt?: string | null;
+};
 
 export default function AlertsScreen() {
-  const [filter, setFilter] = useState<"All" | "Safety" | "Device">("All");
-  const alerts = [
-    {
-      type: "Safety",
-      time: "Today · 9:18 AM",
-      title: "Blocked website attempt",
-      detail:
-        "A sample adult-content domain was blocked by the preview policy.",
-      tone: "#C56A58",
-      unread: true,
-    },
-    {
-      type: "Device",
-      time: "Today · 8:02 AM",
-      title: "Device came online",
-      detail: "Riley's iPhone connected · Sample event.",
-      tone: "#4779B8",
-      unread: true,
-    },
-    {
-      type: "Safety",
-      time: "Yesterday · 6:24 PM",
-      title: "App installation requested",
-      detail: "StudySpace is waiting for parent review.",
-      tone: "#D49B3D",
-      unread: false,
-    },
-  ];
-  const visibleAlerts =
-    filter === "All" ? alerts : alerts.filter((alert) => alert.type === filter);
+  const [alerts, setAlerts] = useState<AlertItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState("");
+  const [error, setError] = useState("");
+
+  const loadAlerts = async () => {
+    setError("");
+    try {
+      const result = await api.alerts.list();
+      setAlerts(Array.isArray(result.data) ? (result.data as AlertItem[]) : []);
+    } catch (requestError) {
+      setError(
+        requestError instanceof ApiError
+          ? requestError.message
+          : "Unable to load alerts.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadAlerts();
+  }, []);
+
+  const acknowledge = async (alertId: string) => {
+    setBusyId(alertId);
+    try {
+      await api.alerts.acknowledge(alertId);
+      await loadAlerts();
+    } catch (requestError) {
+      Alert.alert(
+        "Could not acknowledge alert",
+        requestError instanceof ApiError
+          ? requestError.message
+          : "Please try again.",
+      );
+    } finally {
+      setBusyId("");
+    }
+  };
 
   return (
     <Screen>
       <PageHeader
         title="Alerts"
-        subtitle="Review safety events and device notifications."
+        subtitle="Safety alerts reported by paired child devices."
       />
-      <View
-        style={{
-          backgroundColor: "#EAF4EF",
-          borderColor: "#D1E8DA",
-          borderWidth: 1,
-          borderRadius: 14,
-          padding: 13,
-          marginBottom: 17,
-        }}
-      >
-        <Text style={{ color: "#45695A", fontSize: 12, lineHeight: 18 }}>
-          Sample alerts for preview only. Push notifications and real device
-          events are not connected.
-        </Text>
-      </View>
-      <View style={{ flexDirection: "row", gap: 8, marginBottom: 15 }}>
-        {(["All", "Safety", "Device"] as const).map((option) => (
-          <Pressable
-            key={option}
-            accessibilityRole="button"
-            accessibilityState={{ selected: filter === option }}
-            onPress={() => setFilter(option)}
-            style={{
-              minWidth: 67,
-              minHeight: 36,
-              paddingHorizontal: 12,
-              borderRadius: 18,
-              backgroundColor: filter === option ? C.navy : C.white,
-              borderWidth: 1,
-              borderColor: filter === option ? C.navy : C.border,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Text
-              style={{
-                color: filter === option ? C.white : C.muted,
-                fontSize: 11,
-                fontWeight: "800",
-              }}
-            >
-              {option}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
       <Text
         style={{
           color: C.navy,
@@ -94,12 +70,21 @@ export default function AlertsScreen() {
           marginBottom: 10,
         }}
       >
-        {visibleAlerts.length} sample events
+        {alerts.length} alerts
       </Text>
+      {loading && <ActivityIndicator color={C.blue} />}
+      {!!error && (
+        <Text accessibilityRole="alert" style={{ color: C.red }}>
+          {error}
+        </Text>
+      )}
+      {!loading && !error && alerts.length === 0 && (
+        <Text style={{ color: C.muted }}>No alerts found.</Text>
+      )}
       <View style={{ gap: 10 }}>
-        {visibleAlerts.map((alert) => (
+        {alerts.map((alert) => (
           <View
-            key={alert.title}
+            key={alert.id}
             style={{
               backgroundColor: C.white,
               borderWidth: 1,
@@ -115,7 +100,7 @@ export default function AlertsScreen() {
                 width: 35,
                 height: 35,
                 borderRadius: 12,
-                backgroundColor: `${alert.tone}18`,
+                backgroundColor: "#F8E8E4",
                 alignItems: "center",
                 justifyContent: "center",
               }}
@@ -125,7 +110,7 @@ export default function AlertsScreen() {
                   width: 9,
                   height: 9,
                   borderRadius: 5,
-                  backgroundColor: alert.tone,
+                  backgroundColor: C.orange,
                 }}
               />
             </View>
@@ -146,9 +131,9 @@ export default function AlertsScreen() {
                     flex: 1,
                   }}
                 >
-                  {alert.title}
+                  {alert.title || alert.type.replaceAll("_", " ")}
                 </Text>
-                {alert.unread && (
+                {!alert.acknowledgedAt && (
                   <View
                     style={{
                       width: 7,
@@ -160,7 +145,8 @@ export default function AlertsScreen() {
                 )}
               </View>
               <Text style={{ color: C.muted, fontSize: 10, marginTop: 4 }}>
-                {alert.time} · {alert.type}
+                {new Date(alert.createdAt).toLocaleString()} ·{" "}
+                {alert.severity || alert.type}
               </Text>
               <Text
                 style={{
@@ -170,8 +156,22 @@ export default function AlertsScreen() {
                   marginTop: 9,
                 }}
               >
-                {alert.detail}
+                {alert.description || alert.type.replaceAll("_", " ")}
               </Text>
+              {!alert.acknowledgedAt && (
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={busyId === alert.id}
+                  onPress={() => void acknowledge(alert.id)}
+                  style={{ alignSelf: "flex-start", marginTop: 10 }}
+                >
+                  <Text
+                    style={{ color: C.blue, fontSize: 12, fontWeight: "800" }}
+                  >
+                    {busyId === alert.id ? "Saving..." : "Acknowledge"}
+                  </Text>
+                </Pressable>
+              )}
             </View>
           </View>
         ))}
