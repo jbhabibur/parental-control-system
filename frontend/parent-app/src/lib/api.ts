@@ -204,7 +204,7 @@ export const api = {
   auth: {
     register: (body: JsonRecord) =>
       request("auth/register", json("POST", body)),
-    login: (body: JsonRecord) => request("auth/login", json("POST", body)),
+    login: (body: JsonRecord) => request("/api/auth/login", json("POST", body)),
     verifyMfaLogin: (body: JsonRecord) =>
       request("auth/mfa/verify-login", json("POST", body)),
     refresh: (refreshToken: string) =>
