@@ -23,16 +23,16 @@ export class ApiError extends Error {
   }
 }
 
-const apiBaseUrl = (
-  process.env.EXPO_PUBLIC_API_URL || "http://localhost:5000/api"
-)
-  .trim()
-  .replace(/\/+$/, "");
+function getResolvedApiBaseUrl(): string {
+  const raw = (process.env.EXPO_PUBLIC_API_URL || "http://localhost:5000").trim().replace(/\/+$/, "");
+  return raw.endsWith("/api") ? raw : `${raw}/api`;
+}
+
 const accessKey = "parent-control.user.access";
 const refreshKey = "parent-control.user.refresh";
 let refreshInFlight: Promise<boolean> | undefined;
 
-async function getStored(key: string) {
+export async function getStored(key: string) {
   if (Platform.OS === "web") {
     return typeof localStorage === "undefined"
       ? null
@@ -41,7 +41,7 @@ async function getStored(key: string) {
   return SecureStore.getItemAsync(key);
 }
 
-async function setStored(key: string, value: string) {
+export async function setStored(key: string, value: string) {
   if (Platform.OS === "web") {
     if (typeof localStorage !== "undefined") localStorage.setItem(key, value);
     return;
@@ -49,7 +49,7 @@ async function setStored(key: string, value: string) {
   await SecureStore.setItemAsync(key, value);
 }
 
-async function removeStored(key: string) {
+export async function removeStored(key: string) {
   if (Platform.OS === "web") {
     if (typeof localStorage !== "undefined") localStorage.removeItem(key);
     return;
@@ -94,7 +94,9 @@ function urlFor(
   path: string,
   query?: Record<string, string | number | boolean | undefined>,
 ) {
-  const url = new URL(`${apiBaseUrl}/${path.replace(/^\/+/, "")}`);
+  const base = getResolvedApiBaseUrl();
+  const cleanPath = path.replace(/^\/?(api\/)?/, "");
+  const url = new URL(`${base}/${cleanPath}`);
   for (const [key, value] of Object.entries(query ?? {})) {
     if (value !== undefined) url.searchParams.set(key, String(value));
   }
@@ -112,12 +114,13 @@ async function rawRequest<T>(
   }
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
+  const targetUrl = urlFor(path);
   let response: Response;
   try {
-    response = await fetch(urlFor(path), { ...options, headers });
+    response = await fetch(targetUrl, { ...options, headers });
   } catch {
     throw new ApiError(
-      `Could not connect to ${apiBaseUrl}. Set EXPO_PUBLIC_API_URL to a backend address reachable from this device.`,
+      `Could not connect to ${targetUrl}. Set EXPO_PUBLIC_API_URL to a backend address reachable from this device.`,
       0,
     );
   }
@@ -383,11 +386,27 @@ export const api = {
   },
   mfa: {
     setup: () => parent("auth/mfa/setup", json("POST")),
-    enable: (token: string) =>
-      parent("auth/mfa/enable", json("POST", { token })),
+    enable: async (token: string) => {
+      try {
+        return await parent("auth/mfa/enable", json("POST", { token }));
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 400) {
+          return await parent("auth/mfa/enable", json("POST", { token, body: { token } }));
+        }
+        throw err;
+      }
+    },
     status: () => parent("auth/mfa/status"),
-    disable: (password: string, token: string) =>
-      parent("auth/mfa/disable", json("POST", { password, token })),
+    disable: async (password: string, token: string) => {
+      try {
+        return await parent("auth/mfa/disable", json("POST", { password, token }));
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 400) {
+          return await parent("auth/mfa/disable", json("POST", { password, token, body: { password, token } }));
+        }
+        throw err;
+      }
+    },
   },
   auditLogs: (query: Record<string, string | number | undefined> = {}) =>
     request<ApiResult>(
@@ -407,7 +426,7 @@ function queryString(query: Record<string, string | number | undefined>) {
 }
 
 async function requestRoot() {
-  const rootUrl = apiBaseUrl.replace(/\/api$/, "");
+  const rootUrl = getResolvedApiBaseUrl().replace(/\/api$/, "");
   try {
     const response = await fetch(rootUrl);
     return (await response.json()) as ApiResult;

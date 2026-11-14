@@ -1,261 +1,235 @@
 import React, { useState } from "react";
-import { Text, View, Alert, Pressable } from "react-native";
-
+import {
+  Alert,
+  Pressable,
+  Switch,
+  Text,
+  View,
+} from "react-native";
 import { Link, router } from "expo-router";
-import * as SecureStore from "expo-secure-store";
-
-import { Screen, PageHeader, Field, Button, C } from "../../components/ui";
-
-// =====================================
-// API CONFIGURATION
-// =====================================
-
-const API_URL = (
-  process.env.EXPO_PUBLIC_API_URL || "http://10.26.8.37:5000"
-).replace(/\/+$/, "");
-
-// =====================================
-// PARENT REGISTRATION SCREEN
-// =====================================
+import { Button, C, Field, PageHeader, Screen } from "../../components/ui";
+import { ApiError, api } from "../../lib/api";
+import { ParentUser, useAuth } from "../../context/auth-context";
 
 export default function RegisterScreen() {
+  const { loginSuccess } = useAuth();
+
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-
+  const [agreed, setAgreed] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
-  // =====================================
-  // REGISTER FUNCTION
-  // =====================================
-
-  const submit = async () => {
+  const handleRegister = async () => {
     if (busy) return;
 
-    // Required fields
     if (!name.trim() || !email.trim() || !password || !confirm) {
-      Alert.alert("Missing Information", "Please complete all fields.");
+      Alert.alert("Missing Information", "Please fill in all required fields.");
       return;
     }
 
-    // Name validation
-    if (name.trim().length < 2 || name.trim().length > 100) {
-      Alert.alert("Invalid Name", "Name must contain 2-100 characters.");
+    const trimmedName = name.trim();
+    if (trimmedName.length < 2 || trimmedName.length > 100) {
+      Alert.alert("Invalid Name", "Name must be between 2 and 100 characters.");
       return;
     }
 
-    // Email validation
     const emailRegex = /^\S+@\S+\.\S+$/;
-
     if (!emailRegex.test(email.trim())) {
       Alert.alert("Invalid Email", "Please enter a valid email address.");
       return;
     }
 
-    // Password validation
     if (password.length < 8 || password.length > 72) {
-      Alert.alert("Invalid Password", "Password must contain 8-72 characters.");
+      Alert.alert(
+        "Invalid Password",
+        "Password must be at least 8 characters and no more than 72 characters.",
+      );
       return;
     }
 
-    // Confirm password
     if (password !== confirm) {
       Alert.alert("Password Mismatch", "Passwords do not match.");
       return;
     }
 
+    if (!agreed) {
+      Alert.alert(
+        "Consent Required",
+        "Please accept the Terms of Service & Parental Consent to proceed.",
+      );
+      return;
+    }
+
     setBusy(true);
-
     try {
-      // =====================================
-      // API REQUEST
-      // =====================================
-
-      const response = await fetch(`${API_URL}/api/auth/register`, {
-        method: "POST",
-
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-
-        body: JSON.stringify({
-          name: name.trim(),
-          email: email.trim().toLowerCase(),
-          password: password,
-        }),
+      const result = await api.auth.register({
+        name: trimmedName,
+        email: email.trim().toLowerCase(),
+        password,
       });
 
-      const result = await response.json();
-
-      // =====================================
-      // ERROR HANDLING
-      // =====================================
-
-      if (!response.ok) {
-        throw new Error(
-          result.message ||
-            result.errors?.[0]?.message ||
-            "Registration failed.",
-        );
-      }
-
-      // =====================================
-      // RESPONSE VALIDATION
-      // =====================================
-
       if (
-        !result.success ||
         !result.user ||
         typeof result.accessToken !== "string" ||
         typeof result.refreshToken !== "string"
       ) {
-        throw new Error("Invalid server response.");
+        throw new Error("The server did not return a valid account session.");
       }
 
-      // =====================================
-      // SAVE AUTH TOKENS
-      // =====================================
+      await loginSuccess(result.user as ParentUser, {
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+      });
 
-      await SecureStore.setItemAsync("user_access_token", result.accessToken);
-
-      await SecureStore.setItemAsync("user_refresh_token", result.refreshToken);
-
-      // =====================================
-      // SUCCESS
-      // =====================================
-
-      Alert.alert("Registration Successful", `Welcome ${result.user.name}!`, [
-        {
-          text: "Continue",
-          onPress: () => {
-            router.replace("/dashboard");
-          },
-        },
-      ]);
+      Alert.alert("Welcome!", "Your parent account has been successfully created.");
+      router.replace("/dashboard");
     } catch (error) {
       Alert.alert(
         "Registration Failed",
-        error instanceof Error ? error.message : "Something went wrong.",
+        error instanceof ApiError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : "Unable to create your account. Please try again.",
       );
     } finally {
       setBusy(false);
     }
   };
 
-  // =====================================
-  // UI
-  // =====================================
-
   return (
     <Screen>
       <PageHeader
-        title="Create account"
-        subtitle="Set up your parent account"
+        title="Create Account"
+        subtitle="Set up your parent administrator account"
       />
-
-      {/* Information Card */}
 
       <View
         style={{
           backgroundColor: C.pale,
-          padding: 17,
+          padding: 16,
           borderRadius: 16,
-          marginBottom: 22,
+          marginBottom: 20,
+          borderWidth: 1,
+          borderColor: "#D7E5FF",
         }}
       >
-        <Text
-          style={{
-            color: C.blue,
-            fontWeight: "800",
-            fontSize: 15,
-          }}
-        >
-          Parent Control
+        <Text style={{ color: C.blue, fontWeight: "800", fontSize: 15 }}>
+          🛡️ Family Protection Administrator
         </Text>
-
         <Text
           style={{
-            color: "#52647F",
+            color: "#475569",
             fontSize: 12,
             lineHeight: 18,
-            marginTop: 5,
+            marginTop: 6,
           }}
         >
-          Create an account to manage connected child devices and family safety
-          settings.
+          As the parent administrator, you will manage connected devices, enforce screen time rules, and supervise web activity.
         </Text>
       </View>
 
-      {/* Full Name */}
-
       <Field
-        label="Full name"
-        placeholder="Enter your full name"
+        label="Full Name"
+        placeholder="Parent or Guardian Name"
         value={name}
         onChangeText={setName}
+        autoCapitalize="words"
       />
 
-      {/* Email */}
-
       <Field
-        label="Email address"
-        placeholder="name@example.com"
+        label="Email Address"
+        placeholder="parent@example.com"
         value={email}
         onChangeText={setEmail}
         keyboardType="email-address"
         autoCapitalize="none"
+        autoCorrect={false}
       />
 
-      {/* Password */}
-
       <Field
-        label="Password"
-        placeholder="At least 8 characters"
+        label="Password (min 8 characters)"
+        placeholder="Create a strong password"
         value={password}
         onChangeText={setPassword}
-        secureTextEntry
+        secureTextEntry={!showPassword}
+        rightAccessory={
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+            onPress={() => setShowPassword((prev) => !prev)}
+            style={{ padding: 10 }}
+          >
+            <Text style={{ color: C.blue, fontWeight: "700", fontSize: 13 }}>
+              {showPassword ? "Hide" : "Show"}
+            </Text>
+          </Pressable>
+        }
       />
 
-      {/* Confirm Password */}
-
       <Field
-        label="Confirm password"
+        label="Confirm Password"
         placeholder="Re-enter your password"
         value={confirm}
         onChangeText={setConfirm}
-        secureTextEntry
+        secureTextEntry={!showConfirm}
+        rightAccessory={
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={showConfirm ? "Hide password" : "Show password"}
+            onPress={() => setShowConfirm((prev) => !prev)}
+            style={{ padding: 10 }}
+          >
+            <Text style={{ color: C.blue, fontWeight: "700", fontSize: 13 }}>
+              {showConfirm ? "Hide" : "Show"}
+            </Text>
+          </Pressable>
+        }
       />
 
-      {/* Register Button */}
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 12,
+          marginVertical: 14,
+          paddingHorizontal: 4,
+        }}
+      >
+        <Switch
+          value={agreed}
+          onValueChange={setAgreed}
+          trackColor={{ false: "#CBD5E1", true: C.blue }}
+          thumbColor={C.white}
+        />
+        <Text style={{ flex: 1, color: C.text, fontSize: 12, lineHeight: 17 }}>
+          I agree to the Terms of Service and consent to parental device monitoring for my children.
+        </Text>
+      </View>
 
       <Button
-        title={busy ? "Creating account..." : "Create account"}
-        onPress={submit}
+        title={busy ? "Creating Account..." : "Create Parent Account"}
         disabled={busy}
+        onPress={() => void handleRegister()}
       />
-
-      {/* Login Navigation */}
 
       <View
         style={{
           flexDirection: "row",
           justifyContent: "center",
           marginTop: 24,
+          alignItems: "center",
         }}
       >
-        <Text style={{ color: C.muted }}>Already have an account? </Text>
-
+        <Text style={{ color: C.muted, fontSize: 14 }}>Already have an account? </Text>
         <Link href="/auth/login" asChild>
-          <Pressable disabled={busy}>
-            <Text
-              style={{
-                color: C.blue,
-                fontWeight: "800",
-              }}
-            >
-              Sign in
+          <Pressable>
+            <Text style={{ color: C.blue, fontWeight: "800", fontSize: 14 }}>
+              Sign In
             </Text>
           </Pressable>
         </Link>

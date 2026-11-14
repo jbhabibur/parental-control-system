@@ -67,17 +67,35 @@ export function Button({
   title,
   onPress,
   secondary = false,
+  disabled = false,
+  danger = false,
 }: {
   title: string;
   onPress: () => void;
   secondary?: boolean;
+  disabled?: boolean;
+  danger?: boolean;
 }) {
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled }}
+      disabled={disabled}
       onPress={onPress}
-      style={[s.button, secondary && s.secondaryButton]}
+      style={[
+        s.button,
+        secondary && s.secondaryButton,
+        danger && { backgroundColor: C.red },
+        disabled && { opacity: 0.55 },
+      ]}
     >
-      <Text style={[s.buttonText, secondary && s.secondaryButtonText]}>
+      <Text
+        style={[
+          s.buttonText,
+          secondary && s.secondaryButtonText,
+          danger && { color: C.white },
+        ]}
+      >
         {title}
       </Text>
     </Pressable>
@@ -100,7 +118,9 @@ export function Field({
         <View style={[s.inputRow, focused && s.inputFocused]}>
           <TextInput
             placeholderTextColor="#9AA5B5"
-            selectionColor={C.blue}
+            selectionColor="rgba(37, 99, 235, 0.25)"
+            cursorColor={C.blue}
+            selectionHandleColor="transparent"
             caretHidden={false}
             style={[s.input, s.inputInRow]}
             autoCapitalize={
@@ -123,7 +143,9 @@ export function Field({
       ) : (
         <TextInput
           placeholderTextColor="#9AA5B5"
-          selectionColor={C.blue}
+          selectionColor="rgba(37, 99, 235, 0.25)"
+          cursorColor={C.blue}
+          selectionHandleColor="transparent"
           caretHidden={false}
           style={[s.input, focused && s.inputFocused]}
           autoCapitalize={
@@ -263,9 +285,7 @@ const s = StyleSheet.create({
     backgroundColor: C.white,
     paddingHorizontal: 15,
     fontSize: 15,
-    lineHeight: 20,
-    paddingVertical: 0,
-    textAlignVertical: "center",
+    paddingVertical: Platform.OS === "android" ? 8 : 12,
     color: C.text,
   },
   inputFocused: { borderColor: C.blue },
@@ -282,8 +302,8 @@ const s = StyleSheet.create({
     flex: 1,
     height: 50,
     borderWidth: 0,
-    lineHeight: 20,
-    paddingVertical: 0,
+    paddingHorizontal: 15,
+    paddingVertical: Platform.OS === "android" ? 8 : 12,
     backgroundColor: "transparent",
   },
   inputAccessory: {
