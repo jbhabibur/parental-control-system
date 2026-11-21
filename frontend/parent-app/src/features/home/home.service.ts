@@ -6,10 +6,28 @@
  * - Queries devices list
  * - Queries pending permission requests
  * - Queries active security alerts
- * Aggregates these into a single DashboardData object.
+ * - Fetches & updates daily screen-time policies for child devices
+ * - Configures app-specific quota limits
  */
 
 import { api } from "../../services/api";
+
+export interface DeviceItem {
+  id: string;
+  deviceName: string;
+  platform?: string;
+  status?: string;
+  lastSeenAt?: string | null;
+}
+
+export interface ScreenTimePolicyData {
+  id?: string;
+  enabled: boolean;
+  dailyLimitMinutes: number;
+  bedtimeStart?: string | null;
+  bedtimeEnd?: string | null;
+  timezone?: string;
+}
 
 export interface DashboardData {
   deviceCount: number;
@@ -41,7 +59,10 @@ export const homeService = {
   /**
    * Fetches real-time dashboard data from the backend APIs concurrently.
    */
-  fetchDashboardSummary: async (): Promise<Partial<DashboardData>> => {
+  fetchDashboardSummary: async (): Promise<{
+    summary: Partial<DashboardData>;
+    rawDevices: DeviceItem[];
+  }> => {
     // 1. Fetch devices, permission requests, and security alerts in parallel
     const [devicesRes, requestsRes, alertsRes] = await Promise.all([
       api.devices.list().catch(() => ({ data: [] })),
@@ -51,12 +72,7 @@ export const homeService = {
 
     // 2. Normalize and parse response datasets
     const devices = Array.isArray(devicesRes.data)
-      ? (devicesRes.data as Array<{
-          id: string;
-          deviceName: string;
-          status: string;
-          lastSeenAt?: string | null;
-        }>)
+      ? (devicesRes.data as DeviceItem[])
       : [];
 
     const requests = Array.isArray(requestsRes.data)
@@ -91,7 +107,7 @@ export const homeService = {
       id: `act-${d.id}-${index}`,
       deviceName: d.deviceName,
       activityType: d.status === "PAUSED" ? "POLICY_PAUSE" : "STATUS_SYNC",
-      details: `Device status verified as ${d.status}`,
+      details: `Device status verified as ${d.status || "ACTIVE"}`,
       time: d.lastSeenAt
         ? new Date(d.lastSeenAt).toLocaleTimeString([], {
             hour: "2-digit",
@@ -112,13 +128,64 @@ export const homeService = {
     }));
 
     return {
-      deviceCount: devices.length,
-      onlineCount: online,
-      offlineCount: offline,
-      pendingRequests: pendingReqs,
-      activeAlertsCount: unackAlerts,
-      recentActivities: mappedActivities,
-      recentAlerts: mappedAlerts,
+      summary: {
+        deviceCount: devices.length,
+        onlineCount: online,
+        offlineCount: offline,
+        pendingRequests: pendingReqs,
+        activeAlertsCount: unackAlerts,
+        recentActivities: mappedActivities,
+        recentAlerts: mappedAlerts,
+      },
+      rawDevices: devices,
     };
+  },
+
+  /**
+   * Fetches active screen-time policy for a child device.
+   */
+  fetchDevicePolicy: async (
+    deviceId: string,
+  ): Promise<ScreenTimePolicyData | null> => {
+    try {
+      const res = await api.screenTime.get(deviceId);
+      return (res.data as ScreenTimePolicyData) || null;
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * Saves or updates the daily screen-time limit for a child device.
+   */
+  saveDailyLimit: async (
+    deviceId: string,
+    dailyLimitMinutes: number,
+    enabled: boolean = true,
+    hasExistingPolicy: boolean = false,
+  ) => {
+    const payload = {
+      dailyLimitMinutes,
+      enabled,
+      timezone: "Asia/Dhaka",
+    };
+
+    return hasExistingPolicy
+      ? await api.screenTime.update(deviceId, payload)
+      : await api.screenTime.create(deviceId, payload);
+  },
+
+  /**
+   * Creates an app-specific time quota for a child device.
+   */
+  createAppLimit: async (
+    deviceId: string,
+    appIdentifier: string,
+    limitMinutes: number,
+  ) => {
+    return await api.screenTime.createAppLimit(deviceId, {
+      appIdentifier: appIdentifier.trim(),
+      limitMinutes,
+    });
   },
 };

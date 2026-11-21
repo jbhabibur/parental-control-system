@@ -5,10 +5,11 @@
  * Visual presentation for the parent dashboard screen.
  * Displays:
  * 1. Administrator header & status indicators
- * 2. KPI metrics (Connected devices, requests, alerts, screen time)
- * 3. Weekly screen time trend chart
- * 4. Quick navigation cards to all parental management features
- * 5. Recent security events feed
+ * 2. FIRST SECTION: Daily Child Screen Time & App Limit Control (Hours, Minutes, Presets, App Quota)
+ * 3. Primary KPI metrics (Connected devices, requests, alerts, screen time)
+ * 4. Weekly screen time trend chart
+ * 5. Quick navigation cards to all parental management features
+ * 6. Recent security events feed
  */
 
 import React from "react";
@@ -18,6 +19,7 @@ import {
   RefreshControl,
   ScrollView,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { Link } from "expo-router";
@@ -32,10 +34,42 @@ export function HomeScreen() {
     loading,
     refreshing,
     error,
+    devices,
+    selectedDeviceId,
+    setSelectedDeviceId,
+    selectedDevice,
+    currentPolicy,
+    limitHours,
+    limitMinutes,
+    limitEnabled,
+    setLimitEnabled,
+    isSavingLimit,
+    policyMessage,
+    saveDailyLimit,
+    applyPreset,
+    adjustHours,
+    adjustMinutes,
+    showAppLimitSection,
+    setShowAppLimitSection,
+    appIdentifier,
+    setAppIdentifier,
+    appLimitMinutes,
+    setAppLimitMinutes,
+    isSavingAppLimit,
+    saveAppQuota,
     onRefresh,
     formatHoursMinutes,
     maxChartMinutes,
   } = useHome();
+
+  const presets = [
+    { label: "30m", minutes: 30 },
+    { label: "1 Hour", minutes: 60 },
+    { label: "1.5 Hours", minutes: 90 },
+    { label: "2 Hours", minutes: 120 },
+    { label: "3 Hours", minutes: 180 },
+    { label: "4 Hours", minutes: 240 },
+  ];
 
   return (
     <Screen>
@@ -50,7 +84,7 @@ export function HomeScreen() {
         }
       >
         {/* ==================================================================== */}
-        {/* 1. Header Row & User Greeting */}
+        {/* 1. Header Row & User Greeting                                        */}
         {/* ==================================================================== */}
         <View style={homeStyles.headerRow}>
           <View style={{ flex: 1 }}>
@@ -124,9 +158,230 @@ export function HomeScreen() {
         )}
 
         {/* ==================================================================== */}
-        {/* 2. Primary KPI Stats */}
+        {/* 2. FIRST SECTION: Daily Child Screen Time & App Limit Control        */}
         {/* ==================================================================== */}
-        <View style={{ flexDirection: "row", gap: 10, marginVertical: 14 }}>
+        <View style={homeStyles.dailyLimitCard}>
+          {/* Card Header with Status Badge */}
+          <View style={homeStyles.limitCardHeader}>
+            <View style={{ flex: 1, paddingRight: 8 }}>
+              <Text style={homeStyles.limitCardTitle}>
+                ⏱️ Daily Child Screen Time Limit
+              </Text>
+              <Text style={homeStyles.limitCardSubtitle}>
+                {selectedDevice
+                  ? `Set daily allowance for ${selectedDevice.deviceName}`
+                  : "Set today's phone & app usage limit for your child"}
+              </Text>
+            </View>
+
+            <View style={homeStyles.statusBadge}>
+              <Text style={homeStyles.statusBadgeText}>
+                {currentPolicy
+                  ? `${Math.floor(currentPolicy.dailyLimitMinutes / 60)}h ${currentPolicy.dailyLimitMinutes % 60}m/day`
+                  : `${limitHours}h ${limitMinutes}m`}
+              </Text>
+            </View>
+          </View>
+
+          {/* Child Device Selector (when multiple devices exist) */}
+          {devices.length > 0 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={homeStyles.deviceChipsScroll}
+            >
+              {devices.map((d) => {
+                const isSelected = d.id === selectedDeviceId;
+                return (
+                  <Pressable
+                    key={d.id}
+                    onPress={() => setSelectedDeviceId(d.id)}
+                    style={[
+                      homeStyles.deviceChip,
+                      isSelected && homeStyles.activeDeviceChip,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        homeStyles.deviceChipText,
+                        isSelected && homeStyles.activeDeviceChipText,
+                      ]}
+                    >
+                      📱 {d.deviceName}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          )}
+
+          {/* Steppers: Hours & Minutes Controls */}
+          <View style={homeStyles.steppersContainer}>
+            {/* Hours Box */}
+            <View style={homeStyles.stepperBox}>
+              <Text style={homeStyles.stepperLabel}>Hours (ঘণ্টা)</Text>
+              <View style={homeStyles.stepperControlsRow}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => adjustHours(-1)}
+                  style={homeStyles.stepperBtn}
+                >
+                  <Text style={homeStyles.stepperBtnText}>−</Text>
+                </Pressable>
+                <Text style={homeStyles.stepperValueText}>{limitHours}h</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => adjustHours(1)}
+                  style={homeStyles.stepperBtn}
+                >
+                  <Text style={homeStyles.stepperBtnText}>+</Text>
+                </Pressable>
+              </View>
+            </View>
+
+            {/* Minutes Box */}
+            <View style={homeStyles.stepperBox}>
+              <Text style={homeStyles.stepperLabel}>Minutes (মিনিট)</Text>
+              <View style={homeStyles.stepperControlsRow}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => adjustMinutes(-15)}
+                  style={homeStyles.stepperBtn}
+                >
+                  <Text style={homeStyles.stepperBtnText}>−</Text>
+                </Pressable>
+                <Text style={homeStyles.stepperValueText}>{limitMinutes}m</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => adjustMinutes(15)}
+                  style={homeStyles.stepperBtn}
+                >
+                  <Text style={homeStyles.stepperBtnText}>+</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+
+          {/* Quick Presets Row */}
+          <View style={homeStyles.presetContainer}>
+            <Text style={homeStyles.presetLabel}>QUICK PRESETS (কুইক টাইম সিলেক্ট):</Text>
+            <View style={homeStyles.presetRow}>
+              {presets.map((p) => {
+                const isSelected =
+                  limitHours * 60 + limitMinutes === p.minutes;
+                return (
+                  <Pressable
+                    key={p.minutes}
+                    onPress={() => void applyPreset(p.minutes)}
+                    style={[
+                      homeStyles.presetChip,
+                      isSelected && homeStyles.presetChipActive,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        homeStyles.presetChipText,
+                        isSelected && homeStyles.presetChipTextActive,
+                      ]}
+                    >
+                      {p.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* Primary Action Button: Save Limit */}
+          <Pressable
+            accessibilityRole="button"
+            disabled={isSavingLimit}
+            onPress={() => void saveDailyLimit()}
+            style={homeStyles.saveLimitBtn}
+          >
+            {isSavingLimit ? (
+              <ActivityIndicator color={C.white} size="small" />
+            ) : (
+              <Text style={homeStyles.saveLimitBtnText}>
+                ✓ Set Today's Daily Limit ({limitHours}h {limitMinutes}m)
+              </Text>
+            )}
+          </Pressable>
+
+          {/* Inline App-Specific Quota Toggle */}
+          <View style={homeStyles.appLimitToggleRow}>
+            <Text style={homeStyles.appLimitToggleText}>
+              📱 Limit Specific App Usage (নির্দিষ্ট অ্যাপ লিমিট)
+            </Text>
+            <Pressable
+              onPress={() => setShowAppLimitSection((prev) => !prev)}
+            >
+              <Text style={{ color: C.blue, fontWeight: "800", fontSize: 12 }}>
+                {showAppLimitSection ? "▲ Hide" : "+ Add App Quota"}
+              </Text>
+            </Pressable>
+          </View>
+
+          {/* Inline App Limit Form */}
+          {showAppLimitSection && (
+            <View style={homeStyles.appLimitForm}>
+              <Text style={{ color: C.navy, fontSize: 12, fontWeight: "700", marginBottom: 6 }}>
+                App Name / Identifier (e.g. YouTube, TikTok, Games)
+              </Text>
+              <TextInput
+                value={appIdentifier}
+                onChangeText={setAppIdentifier}
+                placeholder="e.g. YouTube or com.google.android.youtube"
+                placeholderTextColor={C.muted}
+                style={homeStyles.appLimitInput}
+              />
+              <Text style={{ color: C.navy, fontSize: 12, fontWeight: "700", marginBottom: 6 }}>
+                Daily Quota (Minutes allowed)
+              </Text>
+              <TextInput
+                value={appLimitMinutes}
+                onChangeText={setAppLimitMinutes}
+                keyboardType="numeric"
+                placeholder="30"
+                placeholderTextColor={C.muted}
+                style={homeStyles.appLimitInput}
+              />
+              <Pressable
+                accessibilityRole="button"
+                disabled={isSavingAppLimit}
+                onPress={() => void saveAppQuota()}
+                style={homeStyles.appLimitSubmitBtn}
+              >
+                {isSavingAppLimit ? (
+                  <ActivityIndicator color={C.white} size="small" />
+                ) : (
+                  <Text style={homeStyles.appLimitSubmitText}>
+                    Enforce App Quota
+                  </Text>
+                )}
+              </Pressable>
+            </View>
+          )}
+
+          {/* Notice & Link to full Screen Time Rules */}
+          <View style={{ marginTop: 10, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <Text style={{ color: C.muted, fontSize: 11 }}>
+              {policyMessage || "Rules synchronize instantly to child device"}
+            </Text>
+            <Link href="/screen-time" asChild>
+              <Pressable>
+                <Text style={{ color: C.blue, fontSize: 11, fontWeight: "700" }}>
+                  Bedtime & Schedules ›
+                </Text>
+              </Pressable>
+            </Link>
+          </View>
+        </View>
+
+        {/* ==================================================================== */}
+        {/* 3. Primary KPI Stats (Connected devices, requests, alerts, avg time) */}
+        {/* ==================================================================== */}
+        <View style={{ flexDirection: "row", gap: 10, marginBottom: 12 }}>
           <Stat
             label="CONNECTED DEVICES"
             value={String(data.deviceCount)}
@@ -153,13 +408,17 @@ export function HomeScreen() {
           />
           <Stat
             label="AVG SCREEN TIME"
-            value="1h 55m"
-            detail="Today across devices"
+            value={
+              currentPolicy
+                ? `${Math.floor(currentPolicy.dailyLimitMinutes / 60)}h ${currentPolicy.dailyLimitMinutes % 60}m`
+                : "1h 55m"
+            }
+            detail="Configured daily limit"
           />
         </View>
 
         {/* ==================================================================== */}
-        {/* 3. Screen Time Trends Chart */}
+        {/* 4. Screen Time Trends Chart                                          */}
         {/* ==================================================================== */}
         <View style={homeStyles.chartCard}>
           <View
@@ -233,7 +492,7 @@ export function HomeScreen() {
         </View>
 
         {/* ==================================================================== */}
-        {/* 4. Quick Actions Grid */}
+        {/* 5. Quick Actions Grid                                                */}
         {/* ==================================================================== */}
         <Text style={homeStyles.sectionTitle}>
           Parent Controls & Management
@@ -263,6 +522,12 @@ export function HomeScreen() {
             title="Screen Time & Bedtime Rules"
             subtitle="Configure daily time limits, app quotas & bedtime curfews"
             href="/screen-time"
+          />
+          <Card
+            icon="🧭"
+            title="Safe Browser Dashboard & Approvals"
+            subtitle="Approve child website requests live, block/unblock domains & view history"
+            href="/safe-browser-dashboard"
           />
           <Card
             icon="🌐"
@@ -307,7 +572,7 @@ export function HomeScreen() {
         </View>
 
         {/* ==================================================================== */}
-        {/* 5. Recent Alerts Feed */}
+        {/* 6. Recent Alerts Feed                                                */}
         {/* ==================================================================== */}
         {data.recentAlerts.length > 0 && (
           <View style={{ marginBottom: 20 }}>

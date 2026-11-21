@@ -5,7 +5,7 @@
  * Provides navigation helper functions with type-safety for Expo Router.
  */
 
-import { router } from "expo-router";
+import { router, type Href } from "expo-router";
 import { ROUTES } from "./navigation.types";
 
 export const AppNavigator = {
@@ -21,6 +21,8 @@ export const AppNavigator = {
   goToDevices: () => router.push(ROUTES.Devices),
   goToScreenTime: () => router.push(ROUTES.ScreenTime),
   goToBrowserPolicy: () => router.push(ROUTES.BrowserPolicy),
+  goToSafeBrowserDashboard: () =>
+    router.push(ROUTES.SafeBrowserDashboard as Href),
   goToPermissions: () => router.push(ROUTES.Permissions),
   goToActivity: () => router.push(ROUTES.Activity),
   goToAlerts: () => router.push(ROUTES.Alerts),

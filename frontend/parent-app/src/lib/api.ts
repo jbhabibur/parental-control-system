@@ -77,6 +77,14 @@ export async function hasAccessToken(kind: AuthKind = "user") {
   return Boolean(await getStored(tokenKeys(kind).access));
 }
 
+export async function getAccessToken(kind: AuthKind = "user") {
+  return getStored(tokenKeys(kind).access);
+}
+
+export function getSocketBaseUrl() {
+  return getResolvedApiBaseUrl().replace(/\/api$/, "");
+}
+
 export async function getRefreshToken(kind: AuthKind = "user") {
   return getStored(tokenKeys(kind).refresh);
 }
@@ -364,6 +372,8 @@ export const api = {
     list: (deviceId: string) =>
       parent(`devices/${id(deviceId)}/browser-history`),
   },
+  browserSummary: (deviceId: string) =>
+    parent(`devices/${id(deviceId)}/browser/summary`),
   alerts: {
     create: (body: JsonRecord) => device("device/alerts", json("POST", body)),
     list: () => parent("alerts"),

@@ -16,6 +16,7 @@ import remoteCommandRouter from "./remote-command.route.js";
 import dnsPolicyRouter from "./dns-policy.route.js";
 import domainCategoryRouter from "./domain-category.route.js";
 import browserHistoryRouter from "./browser-history.route.js";
+import browserFilterRouter from "./browser-filter.route.js";
 import securityAlertRouter from "./security-alert.route.js";
 import notificationRouter from "./notification.route.js";
 import locationRouter from "./location.route.js";
@@ -72,6 +73,9 @@ router.use("/", domainCategoryRouter);
 
 // Browser History Management APIs
 router.use("/", browserHistoryRouter);
+
+// Safe Browser Filtering & Policy Sync APIs
+router.use("/", browserFilterRouter);
 
 // Security Alert Management APIs
 router.use("/", securityAlertRouter);

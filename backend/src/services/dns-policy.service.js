@@ -1,4 +1,8 @@
 import { prisma } from "../config/database.js";
+import { emitToChild } from "../config/socket.js";
+import { normalizeDomain } from "../utils/domain.util.js";
+
+const DEFAULT_DOH_ENDPOINT = "https://family.cloudflare-dns.com/dns-query";
 
 // ========== CREATE DNS POLICY ==========
 export const createDnsPolicy = async (parentId, deviceId, data) => {
@@ -33,7 +37,7 @@ export const createDnsPolicy = async (parentId, deviceId, data) => {
     throw error;
   }
 
-  return prisma.dnsPolicy.create({
+  const policy = await prisma.dnsPolicy.create({
     data: {
       deviceId,
       enabled: data.enabled ?? true,
@@ -43,6 +47,14 @@ export const createDnsPolicy = async (parentId, deviceId, data) => {
       safeSearch: data.safeSearch ?? true,
     },
   });
+
+  emitToChild(deviceId, "dns:policy-updated", {
+    deviceId,
+    policy,
+    updatedAt: new Date().toISOString(),
+  });
+
+  return policy;
 };
 
 // ========== Get DNS Policy (PARENT) ==========
@@ -121,7 +133,7 @@ export const updateDnsPolicy = async (parentId, deviceId, data) => {
     throw error;
   }
 
-  return prisma.dnsPolicy.update({
+  const updated = await prisma.dnsPolicy.update({
     where: {
       deviceId,
     },
@@ -143,9 +155,17 @@ export const updateDnsPolicy = async (parentId, deviceId, data) => {
       }),
     },
   });
+
+  emitToChild(deviceId, "dns:policy-updated", {
+    deviceId,
+    policy: updated,
+    updatedAt: new Date().toISOString(),
+  });
+
+  return updated;
 };
 
-// ========== Add Domain Rule (PARENT) ==========
+// ========== Add or Upsert Domain Rule (PARENT) ==========
 export const addDomainRule = async (parentId, deviceId, data) => {
   const device = await prisma.device.findFirst({
     where: {
@@ -166,20 +186,23 @@ export const addDomainRule = async (parentId, deviceId, data) => {
     throw error;
   }
 
-  const policy = await prisma.dnsPolicy.findUnique({
+  // Ensure a DNS policy exists so parents can block/unblock domains anytime
+  const policy = await prisma.dnsPolicy.upsert({
     where: {
       deviceId,
+    },
+    update: {},
+    create: {
+      deviceId,
+      enabled: true,
+      safeSearch: true,
+      provider: "ChildSafe Family DNS",
+      dohEndpoint: DEFAULT_DOH_ENDPOINT,
     },
     select: {
       id: true,
     },
   });
-
-  if (!policy) {
-    const error = new Error("DNS policy not found");
-    error.statusCode = 404;
-    throw error;
-  }
 
   if (data.categoryId) {
     const category = await prisma.domainCategory.findUnique({
@@ -198,14 +221,38 @@ export const addDomainRule = async (parentId, deviceId, data) => {
     }
   }
 
-  return prisma.domainRule.create({
-    data: {
+  const normalizedDomain =
+    normalizeDomain(data.domain) || data.domain.trim().toLowerCase();
+
+  // Upsert allows seamless toggling between BLOCK and ALLOW anytime
+  const rule = await prisma.domainRule.upsert({
+    where: {
+      dnsPolicyId_domain: {
+        dnsPolicyId: policy.id,
+        domain: normalizedDomain,
+      },
+    },
+    update: {
+      action: data.action,
+      categoryId: data.categoryId ?? null,
+    },
+    create: {
       dnsPolicyId: policy.id,
       categoryId: data.categoryId ?? null,
-      domain: data.domain,
+      domain: normalizedDomain,
       action: data.action,
     },
   });
+
+  // Notify child Safe Browser immediately so active pages obey live block/unblock
+  emitToChild(deviceId, "dns:policy-updated", {
+    deviceId,
+    domain: rule.domain,
+    action: rule.action,
+    updatedAt: new Date().toISOString(),
+  });
+
+  return rule;
 };
 
 // ========== Get Domain Rules (PARENT) ==========
@@ -323,13 +370,18 @@ export const updateDomainRule = async (parentId, deviceId, ruleId, data) => {
     }
   }
 
-  return prisma.domainRule.update({
+  const normalizedDomain =
+    data.domain !== undefined
+      ? normalizeDomain(data.domain) || data.domain.trim().toLowerCase()
+      : undefined;
+
+  const updated = await prisma.domainRule.update({
     where: {
       id: ruleId,
     },
     data: {
-      ...(data.domain !== undefined && {
-        domain: data.domain,
+      ...(normalizedDomain !== undefined && {
+        domain: normalizedDomain,
       }),
       ...(data.action !== undefined && {
         action: data.action,
@@ -339,6 +391,15 @@ export const updateDomainRule = async (parentId, deviceId, ruleId, data) => {
       }),
     },
   });
+
+  emitToChild(deviceId, "dns:policy-updated", {
+    deviceId,
+    domain: updated.domain,
+    action: updated.action,
+    updatedAt: new Date().toISOString(),
+  });
+
+  return updated;
 };
 
 // ========== DELETE DOMAIN RULE (PARENT) ==========
@@ -384,6 +445,7 @@ export const deleteDomainRule = async (parentId, deviceId, ruleId) => {
     },
     select: {
       id: true,
+      domain: true,
     },
   });
 
@@ -393,9 +455,18 @@ export const deleteDomainRule = async (parentId, deviceId, ruleId) => {
     throw error;
   }
 
-  return prisma.domainRule.delete({
+  const deleted = await prisma.domainRule.delete({
     where: {
       id: ruleId,
     },
   });
+
+  emitToChild(deviceId, "dns:policy-updated", {
+    deviceId,
+    domain: rule.domain,
+    action: "REMOVED",
+    updatedAt: new Date().toISOString(),
+  });
+
+  return deleted;
 };

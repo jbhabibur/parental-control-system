@@ -1,0 +1,13 @@
+{
+  "name": "parental-control-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Frontend workspace for Parent and Child Expo applications",
+  "scripts": {
+    "start:parent": "npm --prefix parent-app start",
+    "start:child": "npm --prefix child-app start",
+    "dev:parent": "npm --prefix parent-app run dev",
+    "web:parent": "npm --prefix parent-app run web",
+    "web:child": "npm --prefix child-app run web"
+  }
+}

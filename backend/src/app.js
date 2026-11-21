@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 
+import env from "./config/dotenv.js";
 import indexRouter from "./routes/index.routes.js";
 
 import {
@@ -14,10 +15,27 @@ const app = express();
 // Security middleware
 app.use(helmet());
 
-// CORS middleware
+// CORS middleware — supports configured origins + Expo Web localhost dev servers
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    origin(origin, callback) {
+      if (!origin) return callback(null, true);
+      if (
+        env.CLIENT_ORIGINS.includes(origin) ||
+        origin === process.env.FRONTEND_URL
+      ) {
+        return callback(null, true);
+      }
+      if (
+        env.NODE_ENV !== "production" &&
+        /^https?:\/\/(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/i.test(
+          origin,
+        )
+      ) {
+        return callback(null, true);
+      }
+      return callback(new Error("Origin not allowed"));
+    },
     credentials: true,
   }),
 );

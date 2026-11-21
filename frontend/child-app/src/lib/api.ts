@@ -23,11 +23,15 @@ export class ApiError extends Error {
   }
 }
 
-const apiBaseUrl = (
-  process.env.EXPO_PUBLIC_API_URL || "http://localhost:5000/api"
-)
-  .trim()
-  .replace(/\/+$/, "");
+function getResolvedApiBaseUrl(): string {
+  const raw = (
+    process.env.EXPO_PUBLIC_API_URL || "http://10.26.8.37:5000"
+  )
+    .trim()
+    .replace(/\/+$/, "");
+  return raw.endsWith("/api") ? raw : `${raw}/api`;
+}
+
 const accessKey = "parent-control.user.access";
 const refreshKey = "parent-control.user.refresh";
 let refreshInFlight: Promise<boolean> | undefined;
@@ -77,6 +81,14 @@ export async function hasAccessToken(kind: AuthKind = "device") {
   return Boolean(await getStored(tokenKeys(kind).access));
 }
 
+export async function getAccessToken(kind: AuthKind = "device") {
+  return getStored(tokenKeys(kind).access);
+}
+
+export function getSocketBaseUrl() {
+  return getResolvedApiBaseUrl().replace(/\/api$/, "");
+}
+
 export async function getRefreshToken(kind: AuthKind = "device") {
   return getStored(tokenKeys(kind).refresh);
 }
@@ -100,7 +112,9 @@ function tokenKeys(kind: AuthKind) {
 }
 
 function urlFor(path: string) {
-  return `${apiBaseUrl}/${path.replace(/^\/+/, "")}`;
+  const base = getResolvedApiBaseUrl();
+  const cleanPath = path.replace(/^\/?(api\/)?/, "");
+  return `${base}/${cleanPath}`;
 }
 
 async function rawRequest<T>(
@@ -118,7 +132,7 @@ async function rawRequest<T>(
     response = await fetch(urlFor(path), { ...options, headers });
   } catch {
     throw new ApiError(
-      `Could not connect to ${apiBaseUrl}. Set EXPO_PUBLIC_API_URL to a backend address reachable from this device.`,
+      `Could not connect to ${urlFor(path)}. Set EXPO_PUBLIC_API_URL to a backend address reachable from this device.`,
       0,
     );
   }
@@ -367,6 +381,11 @@ export const api = {
       device("device/browser-history", json("POST", body)),
     list: (deviceId: string) =>
       parent(`devices/${id(deviceId)}/browser-history`),
+  },
+  browser: {
+    checkUrl: (body: JsonRecord) =>
+      device("device/browser/check-url", json("POST", body)),
+    getDnsPolicy: () => device("device/browser/dns-policy"),
   },
   alerts: {
     create: (body: JsonRecord) => device("device/alerts", json("POST", body)),

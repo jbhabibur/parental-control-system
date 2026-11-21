@@ -154,6 +154,13 @@ export default function MonitoringStatusScreen() {
           </View>
         ))}
         <TouchableOpacity
+          style={[styles.button, { backgroundColor: "#16A34A" }]}
+          onPress={() => router.push("/safe-browser")}
+        >
+          <Text style={styles.buttonText}>🌐 Open Safe Browser</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
           style={[
             styles.button,
             {

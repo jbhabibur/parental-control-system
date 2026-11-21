@@ -19,6 +19,7 @@ export type AppRoutes = {
   Devices: "/devices";
   ScreenTime: "/screen-time";
   BrowserPolicy: "/browser-policy";
+  SafeBrowserDashboard: "/safe-browser-dashboard";
   Permissions: "/permissions";
   Activity: "/activity";
   Alerts: "/alerts";
@@ -38,6 +39,7 @@ export const ROUTES: AppRoutes = {
   Devices: "/devices",
   ScreenTime: "/screen-time",
   BrowserPolicy: "/browser-policy",
+  SafeBrowserDashboard: "/safe-browser-dashboard",
   Permissions: "/permissions",
   Activity: "/activity",
   Alerts: "/alerts",
